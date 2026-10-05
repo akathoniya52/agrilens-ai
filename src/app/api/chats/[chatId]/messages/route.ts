@@ -11,6 +11,7 @@ import { Message, type MessageDoc } from "@/lib/models/Message";
 import type { UserDoc } from "@/lib/models/User";
 import { serializeMessage } from "@/lib/serialize";
 import { NDJSON_HEADERS } from "@/lib/stream";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,7 +19,7 @@ export const maxDuration = 60;
 type Params = { params: Promise<{ chatId: string }> };
 
 const AttachmentSchema = z.object({
-  url: z.string().min(1),
+  url: z.string().min(1).max(7_200_000),
   type: z.string().refine(isAllowedImageType, "Unsupported attachment type"),
   width: z.number().int().positive().optional(),
   height: z.number().int().positive().optional(),
@@ -115,6 +116,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
+    const limited = await rateLimit("chat-message", auth.user._id.toString(), RATE_LIMITS.chatMessage);
+    if (limited) return limited;
     const { user } = auth;
 
     const { chatId } = await params;

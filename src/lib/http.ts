@@ -1,9 +1,22 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { isValidObjectId } from "mongoose";
 import type { z } from "zod";
 
 export function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
+}
+
+/** Constant-time string comparison; hashing first equalises lengths so the secret's length isn't leaked. */
+export function safeEqual(a: string, b: string): boolean {
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(a), digest(b));
+}
+
+/** Rejects requests whose declared Content-Length exceeds `maxBytes` before the body is buffered. */
+export function exceedsContentLength(req: Request, maxBytes: number): boolean {
+  const declared = Number(req.headers.get("content-length"));
+  return Number.isFinite(declared) && declared > maxBytes;
 }
 
 /** Logs the details server-side; the client only ever sees a generic message. */

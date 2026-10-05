@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { parseJsonBody, serverError } from "@/lib/http";
+import { jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { PushSubscriptionModel } from "@/lib/models/PushSubscription";
-import { pushEnabled, vapidPublicKey } from "@/lib/push";
+import { isPushServiceEndpoint, pushEnabled, vapidPublicKey } from "@/lib/push";
 
 const SubscribeSchema = z.object({
-  endpoint: z.string().url().max(2000),
+  endpoint: z.string().url().max(2000).refine(isPushServiceEndpoint, "Unsupported push endpoint"),
   keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
 });
 
@@ -24,8 +24,14 @@ export async function POST(req: NextRequest) {
     const parsed = await parseJsonBody(req, SubscribeSchema);
     if ("error" in parsed) return parsed.error;
 
+    // An endpoint already bound to another account must not be re-bound (subscription takeover).
+    const existing = await PushSubscriptionModel.findOne({ endpoint: parsed.data.endpoint }).select("userId").lean();
+    if (existing && !existing.userId.equals(auth.user._id)) {
+      return jsonError("Push endpoint already registered", 409);
+    }
+
     await PushSubscriptionModel.findOneAndUpdate(
-      { endpoint: parsed.data.endpoint },
+      { endpoint: parsed.data.endpoint, userId: auth.user._id },
       {
         $set: {
           userId: auth.user._id,

@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { jsonError, serverError } from "@/lib/http";
+import { jsonError, safeEqual, serverError } from "@/lib/http";
 import { parseInboundMessages, verifyWebhookSignature, whatsappConfig } from "@/lib/whatsapp";
 import { handleInbound } from "@/lib/whatsapp-bot";
 
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const config = whatsappConfig();
   if (!config) return jsonError("WhatsApp is not configured", 503);
   const params = req.nextUrl.searchParams;
-  if (params.get("hub.mode") === "subscribe" && params.get("hub.verify_token") === config.verifyToken) {
+  if (params.get("hub.mode") === "subscribe" && safeEqual(params.get("hub.verify_token") ?? "", config.verifyToken)) {
     return new Response(params.get("hub.challenge") ?? "", { headers: { "Content-Type": "text/plain" } });
   }
   return jsonError("Forbidden", 403);

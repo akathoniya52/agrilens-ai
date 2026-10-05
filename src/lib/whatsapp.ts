@@ -105,6 +105,19 @@ export async function sendWhatsAppText(config: WhatsAppConfig, to: string, text:
   }
 }
 
+/** The access token is only ever sent to Meta's own media CDN. */
+export function isMetaMediaUrl(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (
+      protocol === "https:" &&
+      ["fbsbx.com", "facebook.com", "whatsapp.net"].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function downloadWhatsAppMedia(
   config: WhatsAppConfig,
   mediaId: string,
@@ -116,7 +129,8 @@ export async function downloadWhatsAppMedia(
   const info: unknown = await meta.json();
   if (!isRecord(info) || !str(info.url)) throw new Error("WhatsApp media has no URL");
   if (typeof info.file_size === "number" && info.file_size > maxBytes) throw new Error("Image too large");
-  const file = await fetch(str(info.url), { headers: auth });
+  if (!isMetaMediaUrl(str(info.url))) throw new Error("Unexpected WhatsApp media host");
+  const file = await fetch(str(info.url), { headers: auth, redirect: "error" });
   if (!file.ok) throw new Error(`WhatsApp media download failed (${file.status})`);
   const data = await file.arrayBuffer();
   if (data.byteLength > maxBytes) throw new Error("Image too large");

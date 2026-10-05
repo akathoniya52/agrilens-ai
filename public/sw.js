@@ -123,7 +123,9 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin).href;
+  const requested = new URL((event.notification.data && event.notification.data.url) || "/", self.location.origin);
+  // Never open off-origin pages from a notification.
+  const target = requested.origin === self.location.origin ? requested.href : new URL("/", self.location.origin).href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
       for (const client of windows) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jsonError, serverError } from "@/lib/http";
+import { jsonError, safeEqual, serverError } from "@/lib/http";
 import { connectDB } from "@/lib/mongodb";
 import { Farm } from "@/lib/models/Farm";
 import { Reminder } from "@/lib/models/Reminder";
@@ -36,7 +36,7 @@ async function sumWithConcurrency<T>(items: T[], limit: number, task: (item: T) 
 
 function authorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
-  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+  return !!secret && safeEqual(req.headers.get("authorization") ?? "", `Bearer ${secret}`);
 }
 
 async function notifyReminders(now: Date) {

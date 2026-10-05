@@ -7,6 +7,7 @@ import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { Case } from "@/lib/models/Case";
 import { Message } from "@/lib/models/Message";
 import { User } from "@/lib/models/User";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 
 const CreateSchema = z.object({
   messageId: z.string().refine(isObjectId, "Invalid message id"),
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
+    const limited = await rateLimit("case-create", auth.user._id.toString(), RATE_LIMITS.caseCreate);
+    if (limited) return limited;
     const { user } = auth;
     const parsed = await parseJsonBody(req, CreateSchema);
     if ("error" in parsed) return parsed.error;

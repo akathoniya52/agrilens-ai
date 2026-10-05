@@ -6,6 +6,7 @@ import { ReadingsBodySchema, readingTime, sensorSnapshot, tokenFromRequest, veri
 import { Field } from "@/lib/models/Field";
 import { SensorReading } from "@/lib/models/SensorReading";
 import { connectDB } from "@/lib/mongodb";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     await connectDB();
     const field = await Field.findById(fieldId).select("userId iotTokenHash").lean();
     if (!field || !verifyDeviceToken(token, field.iotTokenHash)) return jsonError("Unauthorized", 401);
+    const limited = await rateLimit("iot-ingest", fieldId, RATE_LIMITS.iotIngest);
+    if (limited) return limited;
 
     const parsed = await parseJsonBody(req, ReadingsBodySchema);
     if ("error" in parsed) return parsed.error;

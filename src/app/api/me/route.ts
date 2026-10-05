@@ -3,10 +3,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { isLanguageCode } from "@/lib/languages";
+import { Farm } from "@/lib/models/Farm";
 import { User } from "@/lib/models/User";
 import { serializeMe } from "@/lib/serialize";
 import { PHONE_CODE_TTL_MS, generatePhoneCode, hashPhoneCode } from "@/lib/phone-link";
 import { normalizePhone } from "@/lib/whatsapp";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 
 const UpdateMeSchema = z.object({
   language: z.string().refine(isLanguageCode, "Unsupported language").optional(),
@@ -16,7 +18,6 @@ const UpdateMeSchema = z.object({
     .object({
       weatherAlerts: z.boolean().optional(),
       reminders: z.boolean().optional(),
-      pushSubscription: z.record(z.string(), z.unknown()).nullable().optional(),
     })
     .optional(),
   phone: z
@@ -78,8 +79,14 @@ export async function PATCH(req: NextRequest) {
     if ("error" in parsed) return parsed.error;
 
     const { phone, ...preferences } = parsed.data;
-    if (phone && (await User.exists({ phone, _id: { $ne: auth.user._id } }))) {
-      return jsonError("This phone number is linked to another account", 409);
+    // Issuing link codes is limited; numbers taken by another account are rejected when the code is
+    // verified (whatsapp-bot.ts tryLinkPhone), so this response never reveals who owns a number.
+    if (phone !== undefined) {
+      const limited = await rateLimit("phone-link", auth.user._id.toString(), RATE_LIMITS.phoneLink);
+      if (limited) return limited;
+    }
+    if (preferences.activeFarmId && !(await Farm.exists({ _id: preferences.activeFarmId, userId: auth.user._id }))) {
+      return jsonError("Farm not found", 404);
     }
     const code = phone ? generatePhoneCode() : null;
     const phoneChange = phoneUpdate(phone, code);

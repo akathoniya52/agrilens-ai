@@ -5,6 +5,7 @@ import { jsonError, serverError } from "@/lib/http";
 import { DiagnosisRecord } from "@/lib/models/Diagnosis";
 import { Farm } from "@/lib/models/Farm";
 import { User } from "@/lib/models/User";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import {
   OUTBREAK_CELL_DEG,
   OUTBREAK_K,
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
+    const limited = await rateLimit("outbreaks", auth.user._id.toString(), RATE_LIMITS.outbreaks);
+    if (limited) return limited;
     const parsed = QuerySchema.safeParse(Object.fromEntries(req.nextUrl.searchParams));
     if (!parsed.success) return jsonError("Invalid query", 400);
     const { lat, lon, radiusKm, days } = parsed.data;

@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { findOwnedField } from "@/lib/farm-service";
 import { isObjectId, jsonError, serverError } from "@/lib/http";
 import { fetchNdvi, fetchNdviImage, sentinelConfig } from "@/lib/ndvi";
+import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import type { NdviResult } from "@/types/insights";
 
 export const runtime = "nodejs";
@@ -13,6 +14,8 @@ export async function GET(req: NextRequest, { params }: Params) {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
+    const limited = await rateLimit("ndvi", auth.user._id.toString(), RATE_LIMITS.ndvi);
+    if (limited) return limited;
     const { fieldId } = await params;
     if (!isObjectId(fieldId)) return jsonError("Field not found", 404);
 

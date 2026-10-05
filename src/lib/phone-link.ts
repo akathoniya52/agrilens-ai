@@ -10,7 +10,9 @@ export interface PendingPhone {
 }
 
 function codeSecret(): string {
-  return process.env.NEXTAUTH_SECRET || "agrilens-phone-link";
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error("NEXTAUTH_SECRET is not set");
+  return secret;
 }
 
 export function generatePhoneCode(): string {

@@ -11,6 +11,31 @@ export interface PushPayload {
 
 let configured: boolean | null = null;
 
+/** Browser push services (Chrome/Edge via FCM, Firefox, Edge legacy/WNS, Safari). */
+const PUSH_SERVICE_HOSTS = [
+  /^fcm\.googleapis\.com$/,
+  /^android\.googleapis\.com$/,
+  /\.push\.services\.mozilla\.com$/,
+  /\.notify\.windows\.com$/,
+  /^web\.push\.apple\.com$/,
+];
+
+/** Only real push services may be stored as endpoints, otherwise the cron would POST to arbitrary (internal) URLs. */
+export function isPushServiceEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    return (
+      url.protocol === "https:" &&
+      !url.port &&
+      !url.username &&
+      !url.password &&
+      PUSH_SERVICE_HOSTS.some((pattern) => pattern.test(url.hostname))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function vapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || null;
 }
@@ -43,6 +68,10 @@ export async function sendPushToUser(userId: Types.ObjectId | string, payload: P
 
   await Promise.all(
     subs.map(async (sub) => {
+      if (!isPushServiceEndpoint(sub.endpoint)) {
+        await PushSubscriptionModel.deleteOne({ _id: sub._id });
+        return;
+      }
       try {
         await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, body, { TTL: 60 * 60 * 12 });
         delivered += 1;

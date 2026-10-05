@@ -192,6 +192,6 @@ export async function executeAgentTool(user: UserDoc, name: string, args: unknow
     }
   } catch (error) {
     console.error(`AgriLens tool ${name} failed:`, error);
-    return { error: error instanceof Error ? error.message : "Tool failed" };
+    return { error: "The tool is temporarily unavailable" };
   }
 }
