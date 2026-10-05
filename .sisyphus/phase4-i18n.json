@@ -1,0 +1,163 @@
+{
+  "nav": {
+    "scan": "Scan",
+    "cases": "Cases"
+  },
+  "chat": {
+    "askExpert": "Ask an expert",
+    "expertRequested": "Sent to an expert",
+    "expertRequestedBody": "An agronomist will review this answer. Track it under Cases.",
+    "viewCases": "View",
+    "sources": "Sources"
+  },
+  "farms": {
+    "insightsFor": "Field insights · {name}"
+  },
+  "dashboard": {
+    "market": "Mandi prices",
+    "radarTitle": "Outbreak radar",
+    "radarBody": "See which diseases other farmers are reporting near you — anonymised and aggregated.",
+    "openRadar": "Open radar"
+  },
+  "fieldInsights": {
+    "ndvi": {
+      "title": "Satellite crop health (NDVI)",
+      "failed": "Satellite data is unavailable right now.",
+      "notConfigured": "Satellite crop health isn't configured on this server.",
+      "noBoundary": "Draw this field's boundary on the map to get satellite crop health.",
+      "noData": "No cloud-free Sentinel-2 pass in the last 90 days.",
+      "latest": "Mean NDVI · pass of {date}",
+      "declining": "Vegetation is declining — scout this field for stress before symptoms show.",
+      "chart": "NDVI over the last 90 days",
+      "showMap": "Show NDVI map",
+      "hideMap": "Hide NDVI map",
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+    },
+    "yield": {
+      "title": "Yield estimate",
+      "failed": "Couldn't estimate yield.",
+      "unknownCrop": "Yield estimates are available for wheat, rice, maize, cotton, tomato, potato, soybean and sugarcane.",
+      "range": "{low}–{high} t",
+      "perHa": "{value} t/ha",
+      "basis": "≈ {perHa} t/ha",
+      "harvest": "harvest ~{date}",
+      "disclaimer": "Estimate only — based on typical yields, not a field measurement"
+    },
+    "sensors": {
+      "title": "Field sensors",
+      "soilMoisture": "Soil moisture",
+      "temperature": "Temperature",
+      "humidity": "Humidity",
+      "updated": "Updated {time}",
+      "chart": "Soil moisture, last 24 hours",
+      "waiting": "Sensor connected — waiting for the first reading.",
+      "none": "Connect a soil sensor (e.g. ESP32) to see live moisture, temperature and humidity.",
+      "tokenOnce": "Copy this token now — it won't be shown again.",
+      "connect": "Connect a sensor",
+      "rotate": "New device token",
+      "revoke": "Disconnect",
+      "connected": "Connected",
+      "confirmRevoke": "Disconnect the sensor? It will stop being able to send readings.",
+      "tokenFailed": "Couldn't create a device token.",
+      "updateFailed": "Couldn't update the device token."
+    }
+  },
+  "market": {
+    "commodity": "Commodity",
+    "state": "State (optional)",
+    "show": "Show",
+    "failed": "Couldn't load market prices.",
+    "notConfigured": "Mandi prices aren't configured on this server (DATA_GOV_IN_API_KEY).",
+    "noData": "No recent mandi prices for {commodity}.",
+    "perQuintal": "Modal price per quintal · {markets, plural, one {# market} other {# markets}}",
+    "trend": {
+      "up": "Rising",
+      "down": "Falling",
+      "flat": "Steady"
+    },
+    "chart": "Price trend with 7-day forecast",
+    "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
+    "buildingHistory": "Trend builds up as daily prices are collected."
+  },
+  "radar": {
+    "title": "Outbreak radar",
+    "subtitle": "Anonymised crop disease reports from farmers near you.",
+    "radius": "Radius",
+    "window": "Last",
+    "days": "{days} days",
+    "locating": "Locating…",
+    "useLocation": "Use my location",
+    "nearby": "Reported nearby",
+    "failed": "Couldn't load the radar.",
+    "needLocation": "Set a location on your active farm or use your current location.",
+    "empty": "No outbreaks reported by enough farmers in this area.",
+    "farms": "{count, plural, one {# farm} other {# farms}}",
+    "privacy": "Only areas where at least {k} different farms reported the same problem are shown, and locations are rounded to ~11 km cells."
+  },
+  "scan": {
+    "title": "Scan a plant",
+    "subtitle": "Point your camera at a leaf for an instant check, then ask AgriLens for a full diagnosis.",
+    "starting": "Starting camera…",
+    "denied": "Camera access was blocked. Allow it in your browser settings, or attach a photo in chat.",
+    "unsupported": "This browser can't open the camera. Attach a photo in chat instead.",
+    "openChat": "Open chat",
+    "capture": "Capture",
+    "captured": "Captured photo",
+    "captureFailed": "Couldn't capture the photo.",
+    "retake": "Retake",
+    "analyze": "Ask AgriLens",
+    "uploading": "Uploading…",
+    "thinking": "Analysing…",
+    "failed": "Couldn't analyse the photo. Check your connection.",
+    "continue": "Continue in chat",
+    "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+  },
+  "onDevice": {
+    "label": "On-device guess",
+    "analyzing": "Checking on-device…",
+    "refine": "AgriLens will confirm when you send"
+  },
+  "cases": {
+    "title": "Expert cases",
+    "subtitle": "AI answers you've sent to an agronomist for review.",
+    "myCases": "My cases",
+    "allCases": "All cases (expert)",
+    "empty": "No cases yet. Use “Ask an expert” under any AI answer in chat.",
+    "loadFailed": "Couldn't load cases.",
+    "updateFailed": "Couldn't update the case.",
+    "untitled": "Crop question",
+    "assignedTo": "Assigned to {email}",
+    "status": {
+      "open": "Open",
+      "assigned": "Assigned",
+      "resolved": "Resolved"
+    },
+    "photo": "Photo {index}",
+    "showAnswer": "Show AI answer",
+    "hideAnswer": "Hide AI answer",
+    "expertNote": "Advice for the farmer…",
+    "farmerNote": "Add details for the expert…",
+    "addNote": "Add a note",
+    "send": "Send",
+    "openChat": "Open chat",
+    "assignToMe": "Assign to me",
+    "resolve": "Mark resolved",
+    "reopen": "Reopen"
+  },
+  "settings": {
+    "whatsapp": {
+      "title": "WhatsApp assistant",
+      "link": "Link your WhatsApp number",
+      "current": "Linked: {phone}",
+      "hint": "Message the AgriLens WhatsApp number with questions or crop photos. Answers use your credits.",
+      "number": "Phone number with country code",
+      "save": "Link",
+      "remove": "Remove",
+      "linked": "WhatsApp number linked",
+      "unlinked": "WhatsApp number removed",
+      "taken": "This number is already linked to another account.",
+      "failed": "Couldn't save the number. Include the country code."
+    }
+  }
+}

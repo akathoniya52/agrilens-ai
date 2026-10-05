@@ -1,79 +1,59 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { connectDB } from "@/lib/mongodb";
+import { z } from "zod";
+import { requireUser } from "@/lib/auth";
+import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { Chat } from "@/lib/models/Chat";
 import { Message } from "@/lib/models/Message";
-import { User } from "@/lib/models/User";
+import { serializeChat } from "@/lib/serialize";
+
+type Params = { params: Promise<{ chatId: string }> };
+
+const UpdateChatSchema = z.object({
+  title: z.string().trim().min(1, "Title required").max(120),
+});
 
 // Update chat title
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
-) {
+export async function PATCH(req: NextRequest, { params }: Params) {
   try {
+    const auth = await requireUser();
+    if ("error" in auth) return auth.error;
+
     const { chatId } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!isObjectId(chatId)) return jsonError("Chat not found", 404);
 
-    const { title } = await req.json();
-    if (!title) {
-      return NextResponse.json({ error: "Title required" }, { status: 400 });
-    }
+    const parsed = await parseJsonBody(req, UpdateChatSchema);
+    if ("error" in parsed) return parsed.error;
 
-    await connectDB();
-    const user = await User.findOne({ email: session.user.email });
     const chat = await Chat.findOneAndUpdate(
-      { _id: chatId, userId: user._id },
-      { title },
+      { _id: chatId, userId: auth.user._id },
+      { title: parsed.data.title },
       { new: true }
-    );
+    ).lean();
+    if (!chat) return jsonError("Chat not found", 404);
 
-    if (!chat) {
-      return NextResponse.json({ error: "Chat not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(chat);
-  } catch (error: any) {
-    console.error("Error updating chat:", error);
-    return NextResponse.json(
-      { error: error?.message || "Failed to update chat" },
-      { status: 500 }
-    );
+    return NextResponse.json(serializeChat(chat));
+  } catch (error) {
+    return serverError("PATCH /api/chats/[chatId]", error);
   }
 }
 
 // Delete chat
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ chatId: string }> }
-) {
+export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
+    const auth = await requireUser();
+    if ("error" in auth) return auth.error;
+
     const { chatId } = await params;
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!isObjectId(chatId)) return jsonError("Chat not found", 404);
 
-    await connectDB();
-    const user = await User.findOne({ email: session.user.email });
-    const chat = await Chat.findOneAndDelete({ _id: chatId, userId: user._id });
-
-    if (!chat) {
-      return NextResponse.json({ error: "Chat not found" }, { status: 404 });
-    }
+    const chat = await Chat.findOneAndDelete({ _id: chatId, userId: auth.user._id });
+    if (!chat) return jsonError("Chat not found", 404);
 
     // Delete all messages in this chat
     await Message.deleteMany({ chatId: chat._id });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error("Error deleting chat:", error);
-    return NextResponse.json(
-      { error: error?.message || "Failed to delete chat" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return serverError("DELETE /api/chats/[chatId]", error);
   }
 }

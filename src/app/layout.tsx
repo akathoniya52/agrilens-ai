@@ -1,29 +1,67 @@
 import "./globals.css";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
+import type { Metadata, Viewport } from "next";
+import { Inter, Space_Grotesk } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
 import Providers from "@/components/Providers";
 import Navbar from "@/components/Navbar";
+import PwaRegister from "@/components/pwa/PwaRegister";
+import { themeInitScript } from "@/components/theme";
 
-export const metadata = {
-  title: "AgriLens AI - Your AI-Powered Crop Health Assistant",
-  description: "Get instant expert advice on crop diseases, pests, soil health, and farm management. Powered by advanced AI technology.",
-  icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png",
-  },
+const inter = Inter({
+  subsets: ["latin", "latin-ext"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin", "latin-ext"],
+  variable: "--font-space-grotesk",
+  display: "swap",
+});
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("meta");
+  return {
+    title: t("title"),
+    description: t("description"),
+    icons: {
+      icon: "/logo.png",
+      shortcut: "/logo.png",
+      apple: "/logo.png",
+    },
+  };
+}
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f0c" },
+    { media: "(prefers-color-scheme: light)", color: "#f7f4ea" },
+  ],
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
+
   return (
-    <html lang="en">
+    <html
+      lang={locale}
+      data-theme="dark"
+      className={`${inter.variable} ${spaceGrotesk.variable}`}
+      suppressHydrationWarning
+    >
       <head>
-        <link rel="icon" href="/logo.png" type="image/png" />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
-      <body className="bg-slate-950 text-slate-100" suppressHydrationWarning>
-        <Providers>
-          <Navbar />
-          {children}
-        </Providers>
+      <body className="min-h-dvh bg-surface text-fg font-sans antialiased" suppressHydrationWarning>
+        <NextIntlClientProvider>
+          <Providers>
+            <Navbar />
+            {children}
+            <PwaRegister />
+          </Providers>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

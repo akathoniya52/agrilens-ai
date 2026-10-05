@@ -1,214 +1,140 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import Image from "next/image";
+import { toast } from "sonner";
+import { motion } from "motion/react";
+import { useTranslations } from "next-intl";
+import { SproutMark } from "@/components/icons";
+import { EASE_FIELD, SproutLoader, cx } from "@/components/ui";
+import type { Attachment } from "@/types/chat";
+import { casesApi } from "@/components/insights/api";
+import CitationChips from "./chat/CitationChips";
+import DiagnosisCard from "./chat/DiagnosisCard";
+import FollowUpChips from "./chat/FollowUpChips";
+import Markdown from "./chat/Markdown";
+import MessageActions from "./chat/MessageActions";
+import { isTempId, type UiMessage } from "./chat/useChatStream";
 
 interface MessageBubbleProps {
-  role: "user" | "assistant" | "system";
-  content: string;
+  message: UiMessage;
+  streaming: boolean;
+  isLatest: boolean;
+  sourceImage?: Attachment;
+  speaking: boolean;
+  onSpeak: () => void;
+  onFeedback: (value: "up" | "down") => void;
+  onRegenerate?: () => void;
+  onFollowUp?: (question: string) => void;
 }
 
-export default function MessageBubble({ role, content }: MessageBubbleProps) {
-  const isUser = role === "user";
-  const [copied, setCopied] = useState(false);
+function UserAttachments({ attachments }: { attachments: Attachment[] }) {
+  const t = useTranslations("chat");
+  const single = attachments.length === 1;
+  return (
+    <div className={cx("mb-2 grid gap-1.5", single ? "w-64 max-w-full" : "w-72 max-w-full grid-cols-2")}>
+      {attachments.map((attachment, i) => (
+        <Image
+          key={`${attachment.url.slice(-24)}-${i}`}
+          src={attachment.url}
+          alt={t("attachedImage", { index: i + 1 })}
+          width={attachment.width ?? 800}
+          height={attachment.height ?? 600}
+          sizes="(max-width: 768px) 70vw, 288px"
+          className={cx(
+            "w-full rounded-2xl border border-border object-cover",
+            single ? "h-auto max-h-80" : "aspect-square h-auto"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
-    }
+export default function MessageBubble({
+  message,
+  streaming,
+  isLatest,
+  sourceImage,
+  speaking,
+  onSpeak,
+  onFeedback,
+  onRegenerate,
+  onFollowUp,
+}: MessageBubbleProps) {
+  const t = useTranslations("chat");
+  const [escalated, setEscalated] = useState(false);
+  const [escalating, setEscalating] = useState(false);
+  const entrance = {
+    initial: { opacity: 0, y: 10 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4, ease: EASE_FIELD },
   };
 
+  if (message.role === "user") {
+    return (
+      <motion.article {...entrance} className="flex flex-col items-end" aria-label={t("you")}>
+        {message.attachments && message.attachments.length > 0 && <UserAttachments attachments={message.attachments} />}
+        {message.content && (
+          <p className="max-w-[min(85%,36rem)] whitespace-pre-wrap rounded-3xl rounded-br-lg border border-accent/25 bg-accent-soft px-4 py-2.5 text-[0.975rem] leading-relaxed text-fg [overflow-wrap:anywhere]">
+            {message.content}
+          </p>
+        )}
+        {message.pending && <span className="mt-1 text-xs text-fg-subtle">{t("pendingSend")}</span>}
+      </motion.article>
+    );
+  }
+
+  const waiting = streaming && !message.content && !message.diagnosis;
+  const persisted = !isTempId(message._id);
+
+  async function escalate() {
+    if (escalated || escalating) return;
+    setEscalating(true);
+    try {
+      await casesApi.create(message._id);
+      setEscalated(true);
+      toast.success(t("expertRequested"), {
+        description: t("expertRequestedBody"),
+        action: { label: t("viewCases"), onClick: () => window.location.assign("/cases") },
+      });
+    } catch {
+      toast.error(t("error"));
+    } finally {
+      setEscalating(false);
+    }
+  }
+
   return (
-    <div className={`mb-4 sm:mb-6 flex flex-col ${isUser ? "items-end" : "items-start"}`}>
-      <div
-        className={`max-w-[95%] sm:max-w-[85%] rounded-xl sm:rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3 ${
-          isUser
-            ? "bg-emerald-500 text-white"
-            : "bg-slate-800 text-slate-100 border border-slate-700"
-        }`}
-      >
-        {isUser ? (
-          <p className="text-sm md:text-base whitespace-pre-wrap break-words">{content}</p>
+    <motion.article {...entrance} className="group/msg flex gap-3" aria-label={t("assistantName")} aria-busy={streaming}>
+      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent ring-1 ring-accent/25">
+        <SproutMark width={17} height={17} strokeWidth={2} />
+      </span>
+      <div className="min-w-0 flex-1 pt-1">
+        {message.diagnosis && <DiagnosisCard diagnosis={message.diagnosis} image={sourceImage} />}
+        {waiting ? (
+          <SproutLoader size={34} label={t("thinking")} className="-mt-1" />
         ) : (
-          <div className="prose prose-invert prose-sm md:prose-base max-w-none">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                // Headings
-                h1: ({ children }) => (
-                  <h1 className="text-2xl font-bold mt-6 mb-4 text-emerald-400 border-b border-slate-700 pb-2">
-                    {children}
-                  </h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="text-xl font-bold mt-5 mb-3 text-emerald-400">
-                    {children}
-                  </h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-lg font-semibold mt-4 mb-2 text-emerald-300">
-                    {children}
-                  </h3>
-                ),
-                h4: ({ children }) => (
-                  <h4 className="text-base font-semibold mt-3 mb-2 text-slate-200">
-                    {children}
-                  </h4>
-                ),
-                
-                // Paragraphs
-                p: ({ children }) => (
-                  <p className="mb-3 leading-relaxed text-slate-200">
-                    {children}
-                  </p>
-                ),
-                
-                // Lists
-                ul: ({ children }) => (
-                  <ul className="list-disc list-inside mb-4 space-y-2 text-slate-200">
-                    {children}
-                  </ul>
-                ),
-                ol: ({ children }) => (
-                  <ol className="list-decimal list-inside mb-4 space-y-2 text-slate-200">
-                    {children}
-                  </ol>
-                ),
-                li: ({ children }) => (
-                  <li className="ml-4 pl-2">
-                    {children}
-                  </li>
-                ),
-                
-                // Code
-                code: ({ inline, children, ...props }: any) =>
-                  inline ? (
-                    <code
-                      className="bg-slate-900 text-emerald-400 px-1.5 py-0.5 rounded text-sm font-mono"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  ) : (
-                    <code
-                      className="block bg-slate-900 text-emerald-400 p-3 rounded-lg overflow-x-auto text-sm font-mono my-3"
-                      {...props}
-                    >
-                      {children}
-                    </code>
-                  ),
-                
-                // Blockquotes
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-4 border-emerald-500 pl-4 py-2 my-4 italic text-slate-300 bg-slate-900/50 rounded-r">
-                    {children}
-                  </blockquote>
-                ),
-                
-                // Links
-                a: ({ href, children }) => (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:text-emerald-300 underline"
-                  >
-                    {children}
-                  </a>
-                ),
-                
-                // Strong/Bold
-                strong: ({ children }) => (
-                  <strong className="font-bold text-white">
-                    {children}
-                  </strong>
-                ),
-                
-                // Emphasis/Italic
-                em: ({ children }) => (
-                  <em className="italic text-slate-300">
-                    {children}
-                  </em>
-                ),
-                
-                // Horizontal Rule
-                hr: () => (
-                  <hr className="my-6 border-slate-700" />
-                ),
-                
-                // Tables
-                table: ({ children }) => (
-                  <div className="overflow-x-auto my-4">
-                    <table className="min-w-full border border-slate-700 rounded-lg">
-                      {children}
-                    </table>
-                  </div>
-                ),
-                thead: ({ children }) => (
-                  <thead className="bg-slate-900">
-                    {children}
-                  </thead>
-                ),
-                tbody: ({ children }) => (
-                  <tbody className="divide-y divide-slate-700">
-                    {children}
-                  </tbody>
-                ),
-                tr: ({ children }) => (
-                  <tr className="hover:bg-slate-900/50">
-                    {children}
-                  </tr>
-                ),
-                th: ({ children }) => (
-                  <th className="px-4 py-2 text-left font-semibold text-emerald-400 border-b border-slate-700">
-                    {children}
-                  </th>
-                ),
-                td: ({ children }) => (
-                  <td className="px-4 py-2 text-slate-200">
-                    {children}
-                  </td>
-                ),
-              }}
-            >
-              {content}
-            </ReactMarkdown>
-          </div>
+          message.content && <Markdown content={message.content} streaming={streaming} />
+        )}
+        {!streaming && message.citations && message.citations.length > 0 && <CitationChips citations={message.citations} />}
+        {!streaming && message.content && (
+          <MessageActions
+            content={message.content}
+            feedback={message.feedback}
+            speaking={speaking}
+            pinned={isLatest}
+            onSpeak={onSpeak}
+            onFeedback={persisted ? onFeedback : undefined}
+            onRegenerate={onRegenerate}
+            onEscalate={persisted ? escalate : undefined}
+            escalated={escalated}
+          />
+        )}
+        {isLatest && !streaming && onFollowUp && message.followUps && (
+          <FollowUpChips items={message.followUps} onPick={onFollowUp} />
         )}
       </div>
-
-      {/* Copy button below the message */}
-      <button
-        type="button"
-        onClick={handleCopy}
-        aria-label={copied ? "Copied" : "Copy"}
-        className={`mt-1.5 flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors ${
-          isUser
-            ? "text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/10"
-            : "text-slate-400 hover:text-slate-300 hover:bg-slate-700/50"
-        }`}
-      >
-        {copied ? (
-          <>
-            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <span>Copied</span>
-          </>
-        ) : (
-          <>
-            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            <span>Copy</span>
-          </>
-        )}
-      </button>
-    </div>
+    </motion.article>
   );
 }

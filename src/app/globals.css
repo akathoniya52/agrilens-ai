@@ -1,34 +1,260 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ──────────────────────────────────────────────────────────────
+   "Living Field" design system
+   Raw palette → semantic tokens. Components use semantic tokens
+   (bg-surface, text-fg, border-border, text-accent …) so both
+   themes work everywhere. Raw palette is for decorative accents.
+   ────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Soil: warm green-black neutrals */
+  --color-soil-950: #0b0f0c;
+  --color-soil-900: #111712;
+  --color-soil-800: #1a221c;
+  --color-soil-700: #26302a;
+  --color-soil-600: #3a463d;
+  --color-soil-500: #5b6a5f;
+  --color-soil-400: #8a9a8e;
+  --color-soil-300: #b7c4b9;
+  --color-soil-200: #d8e0d9;
+  --color-soil-100: #eef2ec;
+  --color-soil-50: #f7f4ea;
+
+  /* Leaf: primary greens */
+  --color-leaf-300: #86efac;
+  --color-leaf-400: #4ade80;
+  --color-leaf-500: #22c55e;
+  --color-leaf-600: #16a34a;
+  --color-leaf-700: #15803d;
+  --color-leaf-800: #166534;
+  --color-leaf-900: #14532d;
+
+  /* Field signals */
+  --color-chlorophyll: #22c55e;
+  --color-harvest: #f59e0b;
+  --color-blight: #ef4444;
+  --color-sky: #38bdf8;
+
+  /* Semantic: dark (default) */
+  --color-surface: #0b0f0c;
+  --color-surface-2: #111712;
+  --color-surface-3: #1a221c;
+  --color-border: #26302a;
+  --color-border-strong: #3a463d;
+  --color-fg: #eef2ec;
+  --color-fg-muted: #b7c4b9;
+  --color-fg-subtle: #8a9a8e;
+  --color-accent: #4ade80;
+  --color-accent-strong: #86efac;
+  --color-accent-fg: #052e16;
+  --color-accent-soft: rgb(74 222 128 / 0.12);
+  --color-glow: rgb(74 222 128 / 0.28);
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #7dd3fc;
+
+  /* Severity scale (green → amber → red) */
+  --color-sev-none: #4ade80;
+  --color-sev-low: #a3e635;
+  --color-sev-moderate: #fbbf24;
+  --color-sev-high: #fb923c;
+  --color-sev-critical: #f87171;
+
+  --ease-field: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --shadow-glow: 0 0 0 1px var(--color-accent-soft), 0 12px 40px -12px var(--color-glow);
+  --shadow-raised: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 20px 50px -20px rgb(0 0 0 / 0.6);
+
+  --animate-aurora: aurora-drift 22s ease-in-out infinite alternate;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-drift: drift 40s linear infinite;
+  --animate-sway: sway 5s ease-in-out infinite;
+  --animate-rise: rise 0.8s var(--ease-field) both;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, "Noto Sans", sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Daylight: high-contrast warm light theme for outdoor reading.
+   Body text ≥ 7:1 on surface; borders darker than a typical light UI. */
+html[data-theme="daylight"] {
+  color-scheme: light;
+  --color-surface: #f7f4ea;
+  --color-surface-2: #fffdf7;
+  --color-surface-3: #ece6d4;
+  --color-border: #b3ab92;
+  --color-border-strong: #6b6551;
+  --color-fg: #12160f;
+  --color-fg-muted: #333c2c;
+  --color-fg-subtle: #4a5443;
+  --color-accent: #14532d;
+  --color-accent-strong: #052e16;
+  --color-accent-fg: #fffdf7;
+  --color-accent-soft: rgb(20 83 45 / 0.1);
+  --color-glow: rgb(20 83 45 / 0.16);
+  --color-success: #14532d;
+  --color-warning: #8a3c0c;
+  --color-danger: #9f1c1c;
+  --color-info: #0b4a6f;
+
+  --color-sev-none: #14532d;
+  --color-sev-low: #3f6212;
+  --color-sev-moderate: #8a3c0c;
+  --color-sev-high: #9a3412;
+  --color-sev-critical: #9f1c1c;
+
+  --shadow-raised: 0 1px 0 0 rgb(255 255 255 / 0.7) inset, 0 16px 40px -24px rgb(40 32 10 / 0.45);
+}
+
+html {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-@keyframes fade-in {
+::selection {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── Utilities ───────────────────────────────────────────────── */
+
+@utility font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Film grain over atmosphere layers */
+@utility grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.12;
+  mix-blend-mode: overlay;
+}
+
+/* Planted-rows texture */
+@utility field-rows {
+  background-image: repeating-linear-gradient(
+    100deg,
+    transparent 0 22px,
+    color-mix(in oklab, var(--color-accent) 8%, transparent) 22px 23px
+  );
+  mask-image: linear-gradient(to bottom, transparent, black 35%, black 70%, transparent);
+}
+
+/* ── Aurora / gradient mesh ─────────────────────────────────── */
+
+@layer components {
+.aurora {
+  position: absolute;
+  inset: -20%;
+  filter: blur(60px);
+  opacity: 0.85;
+  background:
+    radial-gradient(40% 35% at 20% 30%, rgb(34 197 94 / 0.45), transparent 70%),
+    radial-gradient(35% 30% at 75% 20%, rgb(245 158 11 / 0.3), transparent 70%),
+    radial-gradient(45% 40% at 60% 80%, rgb(20 83 45 / 0.6), transparent 70%),
+    radial-gradient(30% 30% at 90% 70%, rgb(56 189 248 / 0.14), transparent 70%);
+  animation: var(--animate-aurora);
+  will-change: transform;
+}
+
+.aurora-2 {
+  background:
+    radial-gradient(35% 30% at 70% 40%, rgb(74 222 128 / 0.28), transparent 70%),
+    radial-gradient(30% 35% at 25% 75%, rgb(251 191 36 / 0.2), transparent 70%);
+  animation-duration: 30s;
+  animation-direction: alternate-reverse;
+}
+
+html[data-theme="daylight"] .aurora {
+  opacity: 0.4;
+}
+}
+
+@keyframes aurora-drift {
+  0% {
+    transform: translate3d(-4%, -2%, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, 4%, 0) rotate(8deg) scale(1.08);
+  }
+  100% {
+    transform: translate3d(5%, -3%, 0) rotate(-6deg) scale(1.02);
+  }
+}
+
+/* ── Shimmer skeleton ───────────────────────────────────────── */
+
+@layer components {
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-fg) 9%, transparent),
+    transparent
+  );
+  animation: var(--animate-shimmer);
+}
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Ambient keyframes (404, hero) ──────────────────────────── */
+
+@keyframes grow-x {
+  0% {
+    transform: scaleX(0);
+  }
+  60%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(18px);
   }
   to {
     opacity: 1;
@@ -36,18 +262,108 @@ body {
   }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out;
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
-.animate-fade-in-delay {
-  animation: fade-in 0.8s ease-out 0.2s both;
+@keyframes drift {
+  from {
+    transform: translateX(-40%);
+  }
+  to {
+    transform: translateX(140%);
+  }
 }
 
-.animate-fade-in-delay-2 {
-  animation: fade-in 0.8s ease-out 0.4s both;
+@keyframes sway {
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
 }
 
-.delay-1000 {
-  animation-delay: 1s;
+/* ── Reduced motion: kill all CSS animation & transitions ───── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Chat ───────────────────────────────────────────────────── */
+
+@layer components {
+.chat-streaming > :is(p, h3, h4, h5, blockquote):last-child::after,
+.chat-streaming > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.55ch;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background: var(--color-accent);
+  box-shadow: 0 0 10px var(--color-glow);
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+.chat-scanline {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in oklab, var(--color-accent) 35%, transparent) 85%,
+    var(--color-accent-strong) 100%
+  );
+  opacity: 0;
+  animation: scan-sweep 1.8s var(--ease-field) 0.2s both;
+}
+
+.chat-progress {
+  animation: chat-progress 1.1s ease-in-out infinite;
+}
+}
+
+@keyframes caret-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+@keyframes scan-sweep {
+  0% {
+    opacity: 0;
+    top: -4rem;
+  }
+  15%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    top: 100%;
+  }
+}
+
+@keyframes chat-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(200%);
+  }
 }

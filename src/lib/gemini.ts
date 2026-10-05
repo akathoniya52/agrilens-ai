@@ -1,114 +1,256 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  FunctionCallingConfigMode,
+  GoogleGenAI,
+  Type,
+  type Content,
+  type FunctionCall,
+  type FunctionDeclaration,
+  type GenerateContentConfig,
+  type Part,
+  type Schema,
+} from "@google/genai";
+import { normalizeDiagnosis } from "@/lib/diagnosis";
+import { buildSystemPrompt, languageInstruction, type ContextSection } from "@/lib/prompts";
+import { cleanTitle } from "@/lib/text";
+import type { Diagnosis } from "@/types/chat";
 
-if (!process.env.GOOGLE_API_KEY) {
-  throw new Error("GOOGLE_API_KEY is not set");
+export { buildSystemPrompt } from "@/lib/prompts";
+export type { ContextSection, SystemPromptOptions } from "@/lib/prompts";
+
+export const GEMINI_MODEL = "gemini-2.5-flash";
+
+const FAST_CONFIG: GenerateContentConfig = { thinkingConfig: { thinkingBudget: 0 } };
+const MAX_FOLLOW_UPS = 3;
+
+let client: GoogleGenAI | null = null;
+
+export function getGenAI(): GoogleGenAI {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error("GOOGLE_API_KEY is not set");
+  }
+  client ??= new GoogleGenAI({ apiKey });
+  return client;
 }
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+export interface AgentToolkit {
+  declarations: FunctionDeclaration[];
+  execute: (name: string, args: unknown) => Promise<Record<string, unknown>>;
+  onCall?: (name: string) => void;
+}
 
-const AGRICULTURE_SYSTEM_PROMPT = `You are AgriLens AI, a helpful, domain-focused assistant that specializes in agriculture.
+export interface StreamAnswerOptions {
+  contents: Content[];
+  language?: string | null;
+  extraContext?: ContextSection[];
+  signal?: AbortSignal;
+  /** Enables Gemini function calling; the loop runs at most MAX_TOOL_ROUNDS tool rounds. */
+  tools?: AgentToolkit;
+}
 
-PRIMARY ROLE
-- Help users understand and manage CROP HEALTH, PLANT DISEASES, PESTS, NUTRIENT DEFICIENCIES, SOIL & WATER ISSUES, and basic FARM MANAGEMENT.
-- You receive:
-  - User questions (text).
-  - Optional crop/leaf/field images and their AI model analysis results.
-  - Optional context about location, crop stage, and recent practices.
+export const MAX_TOOL_ROUNDS = 4;
 
-TONE & STYLE
-- Be clear, practical, and concise.
-- Prioritize actionable steps over theory.
-- Use simple language that a non-technical farmer or agribusiness worker can understand.
-- When needed, organize answers using short bullet points and numbered steps.
+const visibleText = (parts: Part[]) =>
+  parts.map((part) => (typeof part.text === "string" && !part.thought ? part.text : "")).join("");
 
-KNOWLEDGE & LIMITS
-- You are NOT a doctor, veterinarian, or legally licensed agronomist. You are an AI advisor.
-- You DO NOT guarantee diagnoses. You provide LIKELY explanations and practical suggestions.
-- Clearly state uncertainty when you are not sure. Use phrases like:
-  - "This looks similar to..."
-  - "A few possible causes are..."
-  - "To be sure, you should consult a local agronomist or extension officer."
-- Always adapt answers to the information the user actually provided (crop type, stage, region, symptoms, image analysis). Do NOT invent details.
+async function runToolCalls(calls: FunctionCall[], tools: AgentToolkit): Promise<Part[]> {
+  return Promise.all(
+    calls.map(async (call) => {
+      const name = call.name ?? "";
+      tools.onCall?.(name);
+      const response = await tools.execute(name, call.args ?? {});
+      return { functionResponse: { ...(call.id ? { id: call.id } : {}), name, response } };
+    })
+  );
+}
 
-IMAGE & MODEL CONTEXT
-- Sometimes you receive an analysis from a computer vision or edge model. It may look like:
-  - Predicted disease name (e.g., "Late blight")
-  - Confidence score (0–1 or percentage)
-  - Additional notes (e.g., "leaf spots with yellow halo").
-- Treat these model predictions as strong hints, not absolute truth.
-- If confidence is high (e.g., >0.8) and symptoms fit the user's description, you may say:
-  - "Based on the image analysis, this is likely <disease>."
-- If confidence is low or conflicting, say:
-  - "The model is not very confident. Here are a few possible issues..."
-- If there is no model result, answer based only on the user's text description.
+export async function* streamAgriAnswer({
+  contents,
+  language,
+  extraContext,
+  signal,
+  tools,
+}: StreamAnswerOptions): AsyncGenerator<string> {
+  const systemInstruction = buildSystemPrompt({ language, extraContext });
+  let history = contents;
 
-HOW TO STRUCTURE YOUR ANSWERS
-For typical crop-health questions, try to structure your response like this:
-
-1. Brief summary
-   - Summarize what the issue is likely to be in 1–3 sentences.
-
-2. Possible causes
-   - List 1–3 likely causes based on crop, symptoms, and any model prediction.
-   - Explicitly mention if it matches a known disease/pest (e.g., "late blight on tomato", "powdery mildew", "nitrogen deficiency").
-
-3. Immediate actions
-   - Very practical steps the user can take NOW to reduce damage, e.g.:
-     - Remove and destroy heavily infected leaves.
-     - Avoid overhead irrigation.
-     - Improve spacing for airflow.
-     - Check for specific insects under leaves.
-   - If they should avoid something, say it clearly (e.g., "Do NOT spray random pesticides without reading the label.")
-
-4. Treatment & management options
-   - Suggest integrated pest management (IPM) style solutions:
-     - Cultural practices (spacing, rotation, sanitation).
-     - Biological controls where applicable.
-     - Chemical options in GENERAL terms (e.g., "a fungicide containing active ingredients like ___").
-   - Do NOT prescribe exact local brand names or break any regulations.
-   - Remind them to follow local guidelines, product labels, and regulations.
-
-5. Prevention tips
-   - Briefly mention how to prevent recurrence (crop rotation, resistant varieties, seed treatment, etc.).
-
-6. When to seek expert help
-   - If the situation is severe, unusual, or affects large area, recommend:
-     - Contacting a local agronomist/extension worker.
-     - Taking a sample to a local lab or agricultural center.
-   - For any questions involving human or animal health, clearly say:
-     - "I cannot give medical/veterinary advice. Please contact a doctor/veterinarian immediately."
-
-OFF-TOPIC & SAFETY
-- If a user asks about topics completely unrelated to agriculture (e.g., programming, politics, entertainment), gently redirect:
-  - "I'm designed to help with agriculture and crop-related questions. Could you ask something about your crops, soil, livestock, or farm management?"
-- If the user asks for:
-  - Dangerous chemical usage.
-  - Illegal substances.
-  - Actions that clearly risk serious harm to people, animals, or the environment.
-  → Refuse clearly and instead suggest safe, legal alternatives.
-
-CLARIFYING QUESTIONS
-- Before giving a detailed answer, if critical information is missing (and the user message is not urgent), briefly ask targeted questions such as:
-  - "Which crop and variety is this?"
-  - "What is the approximate plant age?"
-  - "Have you recently applied any fertilizer or pesticide?"
-  - "Are the symptoms spreading quickly or slowly?"
-
-CONTEXT AWARENESS
-- Use the chat history. Remember what crop they are talking about in this conversation.
-- If they follow up with "what should I do next?" you should build on your previous advice instead of restarting from scratch.
-
-GOAL
-- Provide useful, responsible, and agriculture-focused guidance that helps the user better understand and manage their crops, while clearly stating limitations and encouraging local expert verification when needed.`;
-
-export function getAgricultureModel() {
-  try {
-    return genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: AGRICULTURE_SYSTEM_PROMPT,
+  for (let round = 0; ; round++) {
+    const toolsEnabled = Boolean(tools) && round < MAX_TOOL_ROUNDS;
+    const stream = await getGenAI().models.generateContentStream({
+      model: GEMINI_MODEL,
+      contents: history,
+      config: {
+        systemInstruction,
+        abortSignal: signal,
+        ...(tools && {
+          tools: [{ functionDeclarations: tools.declarations }],
+          toolConfig: {
+            functionCallingConfig: { mode: toolsEnabled ? FunctionCallingConfigMode.AUTO : FunctionCallingConfigMode.NONE },
+          },
+        }),
+      },
     });
-  } catch (error) {
-    console.error("Error creating Gemini model:", error);
-    throw new Error("Failed to initialize Gemini AI model. Please check your API key.");
+
+    const modelParts: Part[] = [];
+    const calls: FunctionCall[] = [];
+    for await (const chunk of stream) {
+      if (signal?.aborted) return;
+      const parts = chunk.candidates?.[0]?.content?.parts ?? [];
+      modelParts.push(...parts);
+      for (const part of parts) if (part.functionCall) calls.push(part.functionCall);
+      const text = visibleText(parts);
+      if (text) yield text;
+    }
+
+    if (!tools || !toolsEnabled || !calls.length || signal?.aborted) return;
+    const responses = await runToolCalls(calls, tools);
+    history = [...history, { role: "model", parts: modelParts }, { role: "user", parts: responses }];
   }
+}
+
+async function generateText(
+  contents: Content[] | Part[] | string,
+  systemInstruction: string,
+  config: GenerateContentConfig = FAST_CONFIG
+): Promise<string> {
+  const response = await getGenAI().models.generateContent({
+    model: GEMINI_MODEL,
+    contents,
+    config: { ...config, systemInstruction },
+  });
+  return response.text?.trim() ?? "";
+}
+
+async function generateJson(
+  contents: Content[] | Part[] | string,
+  systemInstruction: string,
+  responseSchema: Schema,
+  config: GenerateContentConfig = FAST_CONFIG
+): Promise<unknown> {
+  const text = await generateText(contents, systemInstruction, {
+    ...config,
+    responseMimeType: "application/json",
+    responseSchema,
+  });
+  return text ? JSON.parse(text) : null;
+}
+
+const DIAGNOSIS_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    crop: { type: Type.STRING, description: "Crop or plant species shown" },
+    condition: { type: Type.STRING, description: "Most likely disease, pest, deficiency, or 'Healthy'" },
+    confidence: { type: Type.NUMBER, description: "Confidence in the condition, 0 to 1" },
+    severity: { type: Type.STRING, enum: ["none", "low", "moderate", "high", "critical"] },
+    affectedAreaPct: { type: Type.NUMBER, description: "Visible affected leaf/plant area, 0 to 100" },
+    boxes: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          label: { type: Type.STRING },
+          confidence: { type: Type.NUMBER },
+          box_2d: {
+            type: Type.ARRAY,
+            items: { type: Type.INTEGER },
+            description: "[ymin, xmin, ymax, xmax] normalized to 0-1000",
+          },
+        },
+        required: ["label", "confidence", "box_2d"],
+      },
+    },
+  },
+  required: ["crop", "condition", "confidence", "severity", "affectedAreaPct", "boxes"],
+  propertyOrdering: ["crop", "condition", "confidence", "severity", "affectedAreaPct", "boxes"],
+};
+
+export async function generateDiagnosis({
+  imageParts,
+  question,
+  language,
+}: {
+  imageParts: Part[];
+  question: string;
+  language?: string | null;
+}): Promise<Diagnosis | null> {
+  if (!imageParts.length) return null;
+  const instruction = [
+    "You are an expert plant pathologist analyzing crop/leaf/field photos.",
+    "Identify the crop and the most likely condition (disease, pest, nutrient deficiency, abiotic stress, or Healthy).",
+    "Return bounding boxes around visibly affected regions (max 10) as box_2d [ymin, xmin, ymax, xmax] normalized to 0-1000.",
+    "If the plant looks healthy use severity \"none\" and no boxes. Be honest about uncertainty via confidence.",
+    `Write crop, condition and box labels in the user's language. ${languageInstruction(language)}`,
+  ].join("\n");
+  const prompt = question.trim() ? `User note: ${question.trim()}` : "Diagnose this crop image.";
+
+  const raw = await generateJson(
+    [{ role: "user", parts: [...imageParts, { text: prompt }] }],
+    instruction,
+    DIAGNOSIS_SCHEMA,
+    {}
+  );
+  return typeof raw === "object" && raw !== null ? normalizeDiagnosis(raw) : null;
+}
+
+export async function generateChatTitle(content: string, language?: string | null): Promise<string | null> {
+  const text = await generateText(
+    content.slice(0, 2000),
+    `Write a concise chat title (at most 6 words) for this farmer's question. Reply with the title only, no quotes or punctuation at the end. ${languageInstruction(language)}`
+  );
+  return cleanTitle(text);
+}
+
+export async function generateFollowUps({
+  question,
+  answer,
+  language,
+}: {
+  question: string;
+  answer: string;
+  language?: string | null;
+}): Promise<string[]> {
+  const raw = await generateJson(
+    `Farmer asked:\n${question.slice(0, 2000)}\n\nAssistant answered:\n${answer.slice(0, 6000)}`,
+    `Suggest exactly 3 short follow-up questions (max 12 words each) the farmer might ask next, written from the farmer's perspective. ${languageInstruction(language)}`,
+    { type: Type.ARRAY, items: { type: Type.STRING } }
+  );
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+    .map((q) => q.trim().slice(0, 160))
+    .slice(0, MAX_FOLLOW_UPS);
+}
+
+export async function summarizeConversation({
+  previousSummary,
+  transcript,
+  language,
+}: {
+  previousSummary: string;
+  transcript: string;
+  language?: string | null;
+}): Promise<string> {
+  const input = [
+    previousSummary && `Existing summary:\n${previousSummary}`,
+    `New messages:\n${transcript}`,
+  ].filter(Boolean).join("\n\n");
+  return generateText(
+    input,
+    `Update the running summary of this agriculture advisory conversation. Keep crop names, locations, symptoms, diagnoses, treatments advised and open questions. Max 200 words, plain text. ${languageInstruction(language)}`
+  );
+}
+
+export async function transcribeAudio({
+  data,
+  mimeType,
+  language,
+}: {
+  data: string;
+  mimeType: string;
+  language?: string | null;
+}): Promise<string> {
+  return generateText(
+    [{ role: "user", parts: [{ inlineData: { data, mimeType } }, { text: "Transcribe this audio." }] }],
+    `You are a speech-to-text engine. Output only the verbatim transcription of the speech, without commentary. The speaker most likely uses this language: ${languageInstruction(language).replace("Respond in ", "")}`
+  );
 }

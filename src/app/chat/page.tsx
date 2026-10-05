@@ -1,35 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import ChatLayout from "@/components/ChatLayout";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import ChatLayout from "@/components/ChatLayout";
+import { MessagesSkeleton } from "@/components/chat/ChatSkeleton";
+
+const OBJECT_ID = /^[a-f\d]{24}$/i;
+
+function Skeleton() {
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 pt-6 sm:px-6">
+      <MessagesSkeleton />
+    </div>
+  );
+}
 
 export default function ChatPage() {
-  const { data: session, status } = useSession();
+  return (
+    <Suspense fallback={<Skeleton />}>
+      <ChatPageInner />
+    </Suspense>
+  );
+}
+
+function ChatPageInner() {
+  const { status } = useSession();
   const router = useRouter();
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const requested = useSearchParams().get("c");
+  const initialChatId = requested && OBJECT_ID.test(requested) ? requested : null;
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    }
+    if (status === "unauthenticated") router.replace("/auth/signin");
   }, [status, router]);
 
-  if (status === "loading") {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <p>Loading...</p>
-      </div>
-    );
-  }
+  if (status !== "authenticated") return <Skeleton />;
 
-  if (!session) return null;
-
-  return (
-    <ChatLayout
-      selectedChatId={selectedChatId}
-      onSelectChat={setSelectedChatId}
-    />
-  );
+  return <ChatLayout initialChatId={initialChatId} />;
 }

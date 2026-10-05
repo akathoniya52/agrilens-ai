@@ -1,340 +1,290 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { motion } from "motion/react";
+import { toast } from "sonner";
+import { useLocale, useTranslations } from "next-intl";
 import Modal from "@/components/Modal";
+import WhatsAppLink from "@/components/settings/WhatsAppLink";
+import { useTheme } from "@/components/ThemeProvider";
+import type { Theme } from "@/components/theme";
+import { getJson, patchMe, type Me, type NotificationPrefs } from "@/components/account";
+import { FadeIn, Panel, PanelRow, Skeleton, Switch, cx } from "@/components/ui";
+import { BellIcon, CheckIcon, DownloadIcon, GlobeIcon, LogoutIcon, PaletteIcon, ShieldIcon, UserIcon } from "@/components/icons";
+import { LANGUAGES, LOCALE_COOKIE, type LanguageCode } from "@/lib/languages";
+
+const DEFAULT_PREFS: NotificationPrefs = { weatherAlerts: true, reminders: true };
+
+const THEME_PREVIEW: Record<Theme, { bg: string; card: string; line: string; dot: string }> = {
+  dark: { bg: "bg-soil-950", card: "bg-soil-800", line: "bg-soil-600", dot: "bg-leaf-400" },
+  daylight: { bg: "bg-soil-50", card: "bg-white", line: "bg-soil-300", dot: "bg-leaf-900" },
+};
 
 export default function SettingsPage() {
-  const { data: session, status } = useSession();
+  const t = useTranslations("settings");
+  const tc = useTranslations("common");
+  const tn = useTranslations("nav");
+  const { status } = useSession();
   const router = useRouter();
-
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [chatHistory, setChatHistory] = useState(true);
-  const [theme, setTheme] = useState("dark");
-  const [saving, setSaving] = useState(false);
+  const locale = useLocale();
+  const { theme, setTheme } = useTheme();
+  const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
   const [exporting, setExporting] = useState(false);
-  const [modal, setModal] = useState<{
-    show: boolean;
-    type: "info" | "success" | "error" | "confirm";
-    title: string;
-    message: string;
-    onConfirm?: () => void;
-  }>({
-    show: false,
-    type: "info",
-    title: "",
-    message: "",
-  });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingLocale, setPendingLocale] = useState<LanguageCode | null>(null);
+  const [isRefreshing, startTransition] = useTransition();
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin");
-    }
+    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status !== "authenticated") return;
+    let cancelled = false;
+    getJson<Me>("/api/me")
+      .then((me) => {
+        if (!cancelled && me.notificationPrefs) setPrefs({ ...DEFAULT_PREFS, ...me.notificationPrefs });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [status, router]);
 
-  const handleSaveSettings = async () => {
-    setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setSaving(false);
-    setModal({
-      show: true,
-      type: "success",
-      title: "Settings Saved",
-      message: "Your settings have been saved successfully!",
-    });
-  };
+  function changeTheme(next: Theme) {
+    if (next === theme) return;
+    setTheme(next);
+    toast.success(t("saved"));
+  }
 
-  const handleDeleteAccount = () => {
-    setModal({
-      show: true,
-      type: "confirm",
-      title: "Delete Account",
-      message:
-        "Are you absolutely sure? This will permanently delete your account and all associated data. This action cannot be undone.",
-      onConfirm: async () => {
-        setModal({
-          show: true,
-          type: "info",
-          title: "Account Deletion",
-          message:
-            "Account deletion would be processed here. You would be logged out and redirected.",
-        });
-      },
-    });
-  };
+  async function changeLanguage(code: LanguageCode) {
+    if (code === locale) return;
+    setPendingLocale(code);
+    document.cookie = `${LOCALE_COOKIE}=${code}; path=/; max-age=31536000; samesite=lax`;
+    try {
+      await patchMe({ language: code });
+    } catch {
+      // The cookie already drives the UI; the account copy can sync next time.
+      toast.error(t("saveFailed"));
+    }
+    startTransition(() => router.refresh());
+    toast.success(t("language.changed"));
+  }
 
-  const handleExportData = async () => {
+  async function togglePref(key: keyof NotificationPrefs, value: boolean) {
+    const previous = prefs;
+    setPrefs({ ...prefs, [key]: value });
+    try {
+      await patchMe({ notificationPrefs: { [key]: value } });
+      toast.success(t("saved"));
+    } catch {
+      setPrefs(previous);
+      toast.error(t("saveFailed"));
+    }
+  }
+
+  async function exportData() {
     setExporting(true);
     try {
-      const chatsRes = await fetch("/api/chats");
-      const chats = await chatsRes.json();
-
-      const allData = [];
-      for (const chat of chats) {
-        const messagesRes = await fetch(`/api/chats/${chat._id}/messages`);
-        const messages = await messagesRes.json();
-        allData.push({ chat, messages });
-      }
-
-      const dataStr = JSON.stringify(allData, null, 2);
-      const dataBlob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(dataBlob);
+      const chats = await getJson<{ _id: string }[]>("/api/chats");
+      const data = await Promise.all(
+        chats.map(async (chat) => ({ chat, messages: await getJson<unknown[]>(`/api/chats/${chat._id}/messages`) }))
+      );
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = `agrilens-data-${new Date().toISOString().split("T")[0]}.json`;
       link.click();
       URL.revokeObjectURL(url);
-
-      setModal({
-        show: true,
-        type: "success",
-        title: "Data Exported",
-        message: "Your data has been successfully exported!",
-      });
-    } catch (error) {
-      console.error("Failed to export data:", error);
-      setModal({
-        show: true,
-        type: "error",
-        title: "Export Failed",
-        message: "Failed to export your data. Please try again.",
-      });
+      toast.success(t("data.exported"));
+    } catch {
+      toast.error(t("data.exportFailed"));
     } finally {
       setExporting(false);
     }
-  };
+  }
 
-  if (status === "loading") {
+  if (status !== "authenticated") {
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-          <div className="flex justify-between items-center mb-10">
-            <div className="h-9 w-32 bg-slate-800 rounded-lg animate-pulse" />
-            <div className="h-10 w-28 bg-slate-800 rounded-lg animate-pulse" />
-          </div>
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-40 bg-slate-900/80 border border-slate-700/80 rounded-2xl animate-pulse mb-6"
-            />
-          ))}
-        </div>
-      </div>
+      <main className="mx-auto max-w-3xl space-y-6 px-4 py-10 sm:px-6" aria-busy="true">
+        <span className="sr-only">{tc("loading")}</span>
+        <Skeleton className="h-10 w-48" />
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-44 rounded-3xl" />
+        ))}
+      </main>
     );
   }
 
-  if (!session) return null;
+  const activeLocale = isRefreshing && pendingLocale ? pendingLocale : locale;
 
   return (
-    <>
-      <div className="min-h-[calc(100vh-56px)] bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
-          {/* Page header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-slate-100 tracking-tight">
-                Settings
-              </h1>
-              <p className="text-slate-400 mt-1 text-sm sm:text-base">
-                Manage your preferences and account
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/profile"
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 hover:border-emerald-500/50 transition-colors text-sm font-medium"
-              >
-                Profile
-              </Link>
-              <button
-                onClick={handleSaveSettings}
-                disabled={saving}
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-              >
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
-            </div>
-          </div>
-
-          {/* Appearance */}
-          <section className="bg-slate-900/80 backdrop-blur border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-6 sm:p-8">
-              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-6 flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
-                    />
-                  </svg>
-                </span>
-                Appearance
-              </h2>
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                  <div>
-                    <p className="font-medium text-slate-100">Theme</p>
-                    <p className="text-sm text-slate-400 mt-0.5">Choose your preferred theme</p>
-                  </div>
-                  <select
-                    value={theme}
-                    onChange={(e) => setTheme(e.target.value)}
-                    className="w-full sm:w-auto min-w-[140px] px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-100 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                  >
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="system">System</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Notifications */}
-          <section className="bg-slate-900/80 backdrop-blur border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-6 sm:p-8">
-              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-6 flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                    />
-                  </svg>
-                </span>
-                Notifications
-              </h2>
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                  <div>
-                    <p className="font-medium text-slate-100">Email notifications</p>
-                    <p className="text-sm text-slate-400 mt-0.5">Receive updates via email</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={emailNotifications}
-                      onChange={(e) => setEmailNotifications(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500 peer-focus:ring-offset-2 peer-focus:ring-offset-slate-900 rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:bg-emerald-500" />
-                  </label>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Privacy & Data */}
-          <section className="bg-slate-900/80 backdrop-blur border border-slate-700/80 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-6 sm:p-8">
-              <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-6 flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
-                </span>
-                Privacy & Data
-              </h2>
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                  <div>
-                    <p className="font-medium text-slate-100">Chat history</p>
-                    <p className="text-sm text-slate-400 mt-0.5">Save your chat conversations</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={chatHistory}
-                      onChange={(e) => setChatHistory(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500 peer-focus:ring-offset-2 peer-focus:ring-offset-slate-900 rounded-full peer after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 peer-checked:bg-emerald-500" />
-                  </label>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
-                  <p className="font-medium text-slate-100">Export your data</p>
-                  <p className="text-sm text-slate-400 mt-0.5 mb-4">
-                    Download all your chat history and data as JSON.
-                  </p>
-                  <button
-                    onClick={handleExportData}
-                    disabled={exporting}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-100 text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-                  >
-                    {exporting ? "Exporting…" : "Export Data"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Danger Zone */}
-          <section className="bg-red-950/20 backdrop-blur border border-red-500/30 rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-6 sm:p-8">
-              <h2 className="text-sm font-semibold text-red-400 uppercase tracking-wider mb-6 flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </span>
-                Danger zone
-              </h2>
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
-                  <p className="font-medium text-slate-100">Sign out</p>
-                  <p className="text-sm text-slate-400 mt-0.5 mb-4">Sign out from your account on this device.</p>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/" })}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-                  >
-                    Sign out
-                  </button>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-900/50 border border-red-500/20">
-                  <p className="font-medium text-red-400">Delete account</p>
-                  <p className="text-sm text-slate-400 mt-0.5 mb-4">
-                    Permanently delete your account and all associated data. This action cannot be undone.
-                  </p>
-                  <button
-                    onClick={handleDeleteAccount}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-                  >
-                    Delete account
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+      <FadeIn className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-4xl font-bold text-fg sm:text-5xl">{t("title")}</h1>
+          <p className="mt-2 text-fg-muted">{t("subtitle")}</p>
         </div>
+        <Link
+          href="/profile"
+          className="inline-flex min-h-11 items-center gap-2 self-start rounded-xl border border-border-strong px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-3"
+        >
+          <UserIcon width={16} height={16} />
+          {tn("profile")}
+        </Link>
+      </FadeIn>
+
+      <div className="space-y-5">
+        <FadeIn delay={0.05}>
+          <Panel title={t("appearance.title")} icon={<PaletteIcon width={18} height={18} />}>
+            <div role="radiogroup" aria-label={t("appearance.theme")} className="grid gap-3 sm:grid-cols-2">
+              {(["dark", "daylight"] as const).map((option) => {
+                const selected = theme === option;
+                const preview = THEME_PREVIEW[option];
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => changeTheme(option)}
+                    className={cx(
+                      "relative flex items-center gap-4 rounded-2xl border-2 p-3 text-left transition-colors",
+                      selected ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-border-strong"
+                    )}
+                  >
+                    <span aria-hidden className={cx("flex h-16 w-20 shrink-0 flex-col gap-1.5 rounded-xl border border-border p-2", preview.bg)}>
+                      <span className={cx("flex items-center gap-1 rounded-md p-1.5", preview.card)}>
+                        <span className={cx("h-2 w-2 rounded-full", preview.dot)} />
+                        <span className={cx("h-1.5 flex-1 rounded-full", preview.line)} />
+                      </span>
+                      <span className={cx("h-1.5 w-3/4 rounded-full", preview.line)} />
+                      <span className={cx("h-1.5 w-1/2 rounded-full", preview.line)} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold text-fg">{t(`appearance.${option}`)}</span>
+                      <span className="mt-0.5 block text-sm text-fg-subtle">{t(`appearance.${option}Hint`)}</span>
+                    </span>
+                    {selected && (
+                      <motion.span
+                        layoutId="theme-check"
+                        className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-accent-fg"
+                      >
+                        <CheckIcon width={14} height={14} strokeWidth={3} />
+                      </motion.span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        </FadeIn>
+
+        <FadeIn delay={0.1}>
+          <Panel title={t("language.title")} icon={<GlobeIcon width={18} height={18} />}>
+            <p className="-mt-2 mb-4 text-sm text-fg-subtle">{t("language.hint")}</p>
+            <div role="radiogroup" aria-label={t("language.title")} className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {LANGUAGES.map((lang) => {
+                const selected = activeLocale === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={isRefreshing}
+                    onClick={() => changeLanguage(lang.code)}
+                    className={cx(
+                      "flex min-h-14 flex-col items-start justify-center rounded-xl border-2 px-3 py-2 text-left transition-colors disabled:cursor-wait",
+                      selected ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-border-strong"
+                    )}
+                  >
+                    <span lang={lang.code} className="font-semibold text-fg">
+                      {lang.nativeLabel}
+                    </span>
+                    <span className="text-xs text-fg-subtle">{lang.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
+        </FadeIn>
+
+        <FadeIn delay={0.15}>
+          <Panel title={t("notifications.title")} icon={<BellIcon width={18} height={18} />}>
+            <div className="space-y-3">
+              {(["weatherAlerts", "reminders"] as const).map((key) => (
+                <PanelRow key={key} id={key} title={t(`notifications.${key}`)} hint={t(`notifications.${key}Hint`)}>
+                  <Switch
+                    checked={prefs[key]}
+                    onChange={(value) => togglePref(key, value)}
+                    labelledBy={`${key}-label`}
+                    describedBy={`${key}-hint`}
+                    className="self-end sm:self-auto"
+                  />
+                </PanelRow>
+              ))}
+            </div>
+          </Panel>
+        </FadeIn>
+
+        <FadeIn delay={0.18}>
+          <WhatsAppLink />
+        </FadeIn>
+
+        <FadeIn delay={0.2}>
+          <Panel title={t("data.title")} icon={<ShieldIcon width={18} height={18} />}>
+            <PanelRow title={t("data.export")} hint={t("data.exportHint")}>
+              <button
+                type="button"
+                onClick={exportData}
+                disabled={exporting}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border-strong bg-surface-2 px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-3 disabled:cursor-wait disabled:opacity-60"
+              >
+                <DownloadIcon width={16} height={16} />
+                {exporting ? t("data.exporting") : t("data.exportButton")}
+              </button>
+            </PanelRow>
+          </Panel>
+        </FadeIn>
+
+        <FadeIn delay={0.25}>
+          <Panel title={t("account.title")} tone="danger" icon={<LogoutIcon width={18} height={18} />}>
+            <div className="space-y-3">
+              <PanelRow title={t("account.signOut")} hint={t("account.signOutHint")}>
+                <button
+                  type="button"
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-3"
+                >
+                  {t("account.signOut")}
+                </button>
+              </PanelRow>
+              <PanelRow title={t("account.delete")} hint={t("account.deleteHint")}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-danger px-4 text-sm font-semibold text-surface transition hover:brightness-110"
+                >
+                  {t("account.delete")}
+                </button>
+              </PanelRow>
+            </div>
+          </Panel>
+        </FadeIn>
       </div>
 
       <Modal
-        isOpen={modal.show}
-        onClose={() => setModal({ ...modal, show: false })}
-        onConfirm={modal.onConfirm}
-        title={modal.title}
-        message={modal.message}
-        type={modal.type}
-        confirmText={modal.type === "confirm" ? "Delete" : "OK"}
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => toast.info(t("account.deleteUnavailable"))}
+        title={t("account.deleteConfirmTitle")}
+        message={t("account.deleteConfirmMessage")}
+        type="confirm"
+        confirmText={t("account.deleteConfirm")}
+        cancelText={tc("cancel")}
       />
-    </>
+    </main>
   );
 }

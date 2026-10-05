@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { cx } from "@/components/ui";
 
 interface ModalProps {
   isOpen: boolean;
@@ -13,6 +15,15 @@ interface ModalProps {
   cancelText?: string;
 }
 
+const ICONS: Record<NonNullable<ModalProps["type"]>, { tone: string; path: ReactNode }> = {
+  success: { tone: "text-success bg-success/12", path: <path d="M20 6 9 17l-5-5" /> },
+  error: { tone: "text-danger bg-danger/12", path: <path d="M18 6 6 18M6 6l12 12" /> },
+  warning: { tone: "text-warning bg-warning/12", path: <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /> },
+  confirm: { tone: "text-danger bg-danger/12", path: <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /> },
+  info: { tone: "text-info bg-info/12", path: <path d="M12 16v-4m0-4h.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z" /> },
+};
+
+/** Blocking dialog. Reserve for destructive confirmations; use toasts for feedback. */
 export default function Modal({
   isOpen,
   onClose,
@@ -24,132 +35,80 @@ export default function Modal({
   cancelText = "Cancel",
 }: ModalProps) {
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
+    if (!isOpen) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = "";
+      document.removeEventListener("keydown", onKey);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
-  const getIcon = () => {
-    switch (type) {
-      case "success":
-        return (
-          <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-        );
-      case "error":
-        return (
-          <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-        );
-      case "warning":
-        return (
-          <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-          </div>
-        );
-      case "confirm":
-        return (
-          <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-        );
-      default:
-        return (
-          <div className="w-12 h-12 rounded-full bg-slate-500/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-        );
-    }
-  };
-
-  const handleConfirm = () => {
-    if (onConfirm) {
-      onConfirm();
-    }
-    onClose();
-  };
+  const icon = ICONS[type];
+  const destructive = type === "confirm" || type === "error";
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fade-in">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-scale-in">
-        {/* Icon */}
-        <div className="flex justify-center">{getIcon()}</div>
-
-        {/* Title */}
-        <h3 className="text-xl font-semibold text-center">{title}</h3>
-
-        {/* Message */}
-        <p className="text-slate-300 text-center">{message}</p>
-
-        {/* Buttons */}
-        <div className="flex gap-3 pt-4">
-          {type === "confirm" && (
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 hover:bg-slate-800 font-medium transition-all"
-            >
-              {cancelText}
-            </button>
-          )}
-          <button
-            onClick={handleConfirm}
-            className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all ${
-              type === "error"
-                ? "bg-red-500 hover:bg-red-600"
-                : type === "success"
-                ? "bg-emerald-500 hover:bg-emerald-600"
-                : type === "warning"
-                ? "bg-yellow-500 hover:bg-yellow-600 text-slate-900"
-                : "bg-emerald-500 hover:bg-emerald-600"
-            }`}
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-end justify-center p-4 sm:items-center">
+          <motion.div
+            className="absolute inset-0 bg-soil-950/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+            aria-describedby="modal-message"
+            initial={{ opacity: 0, y: 24, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+            className="relative w-full max-w-md space-y-4 rounded-3xl border border-border-strong bg-surface-2 p-6 text-center shadow-raised"
           >
-            {confirmText}
-          </button>
+            <span className={cx("mx-auto flex h-12 w-12 items-center justify-center rounded-full", icon.tone)}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                {icon.path}
+              </svg>
+            </span>
+            <h3 id="modal-title" className="font-display text-xl font-semibold text-fg">
+              {title}
+            </h3>
+            <p id="modal-message" className="text-fg-muted">
+              {message}
+            </p>
+            <div className="flex gap-3 pt-2">
+              {type === "confirm" && (
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={onClose}
+                  className="min-h-12 flex-1 rounded-xl border border-border-strong font-semibold text-fg transition-colors hover:bg-surface-3"
+                >
+                  {cancelText}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  onConfirm?.();
+                  onClose();
+                }}
+                className={cx(
+                  "min-h-12 flex-1 rounded-xl font-semibold transition hover:brightness-110",
+                  destructive ? "bg-danger text-surface" : "bg-accent text-accent-fg"
+                )}
+              >
+                {confirmText}
+              </button>
+            </div>
+          </motion.div>
         </div>
-      </div>
-
-      <style jsx>{`
-        @keyframes scale-in {
-          from {
-            opacity: 0;
-            transform: scale(0.95);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        .animate-scale-in {
-          animation: scale-in 0.2s ease-out;
-        }
-      `}</style>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

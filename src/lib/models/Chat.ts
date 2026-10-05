@@ -1,12 +1,30 @@
-import { Schema, model, models, Types } from "mongoose";
+import { Schema, model, models, Types, type HydratedDocument, type Model } from "mongoose";
 
-const ChatSchema = new Schema(
+export interface IChat {
+  userId: Types.ObjectId;
+  title: string;
+  lastMessageAt: Date;
+  summary: string;
+  summarizedUpTo: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type ChatDoc = HydratedDocument<IChat>;
+
+export const DEFAULT_CHAT_TITLE = "New chat";
+
+const ChatSchema = new Schema<IChat>(
   {
-    userId: { type: Types.ObjectId, ref: "User", required: true },
-    title: { type: String, default: "New chat" },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    title: { type: String, default: DEFAULT_CHAT_TITLE },
     lastMessageAt: { type: Date, default: Date.now },
+    summary: { type: String, default: "" },
+    summarizedUpTo: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
-export const Chat = models.Chat || model("Chat", ChatSchema);
+ChatSchema.index({ userId: 1, lastMessageAt: -1 });
+
+export const Chat = (models.Chat as Model<IChat>) || model<IChat>("Chat", ChatSchema);
