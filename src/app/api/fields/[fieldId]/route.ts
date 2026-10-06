@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { FieldPatch, definedOnly } from "@/lib/farm-schemas";
-import { findOwnedField, serializeField } from "@/lib/farm-service";
+import { findOwnedField, isGeoIndexError, serializeField } from "@/lib/farm-service";
 import { polygonAreaHa } from "@/lib/geo";
 import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { DiagnosisRecord } from "@/lib/models/Diagnosis";
 import { Reminder } from "@/lib/models/Reminder";
+import { SensorReading } from "@/lib/models/SensorReading";
 
 type Params = { params: Promise<{ fieldId: string }> };
 
@@ -49,6 +50,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await field.save();
     return NextResponse.json(serializeField(field.toObject()));
   } catch (error) {
+    if (isGeoIndexError(error)) return jsonError("Invalid field boundary", 400);
     return serverError("PATCH /api/fields/[fieldId]", error);
   }
 }
@@ -66,6 +68,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     await Promise.all([
       Reminder.deleteMany({ fieldId: field._id, userId: auth.user._id }),
       DiagnosisRecord.updateMany({ fieldId: field._id, userId: auth.user._id }, { $set: { fieldId: null } }),
+      SensorReading.deleteMany({ fieldId: field._id, userId: auth.user._id }),
     ]);
     await field.deleteOne();
     return NextResponse.json({ success: true });

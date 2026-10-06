@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { motion } from "motion/react";
 import { useTranslations } from "next-intl";
@@ -33,20 +34,39 @@ function UserAttachments({ attachments }: { attachments: Attachment[] }) {
   const single = attachments.length === 1;
   return (
     <div className={cx("mb-2 grid gap-1.5", single ? "w-64 max-w-full" : "w-72 max-w-full grid-cols-2")}>
-      {attachments.map((attachment, i) => (
-        <Image
-          key={`${attachment.url.slice(-24)}-${i}`}
-          src={attachment.url}
-          alt={t("attachedImage", { index: i + 1 })}
-          width={attachment.width ?? 800}
-          height={attachment.height ?? 600}
-          sizes="(max-width: 768px) 70vw, 288px"
-          className={cx(
-            "w-full rounded-2xl border border-border object-cover",
-            single ? "h-auto max-h-80" : "aspect-square h-auto"
-          )}
-        />
-      ))}
+      {attachments.map((attachment, i) => {
+        const key = `${attachment.url.slice(-24)}-${i}`;
+        const alt = t("attachedImage", { index: i + 1 });
+        const sizes = "(max-width: 768px) 70vw, 288px";
+        if (!attachment.width || !attachment.height) {
+          // Older images were saved without dimensions: reserve a fixed box so nothing jumps while they load.
+          return (
+            <span
+              key={key}
+              className={cx(
+                "relative block w-full overflow-hidden rounded-2xl border border-border bg-surface-3",
+                single ? "aspect-[4/3]" : "aspect-square"
+              )}
+            >
+              <Image src={attachment.url} alt={alt} fill sizes={sizes} className="object-cover" />
+            </span>
+          );
+        }
+        return (
+          <Image
+            key={key}
+            src={attachment.url}
+            alt={alt}
+            width={attachment.width}
+            height={attachment.height}
+            sizes={sizes}
+            className={cx(
+              "w-full rounded-2xl border border-border object-cover",
+              single ? "h-auto max-h-80" : "aspect-square h-auto"
+            )}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -63,6 +83,7 @@ export default function MessageBubble({
   onFollowUp,
 }: MessageBubbleProps) {
   const t = useTranslations("chat");
+  const router = useRouter();
   const [escalated, setEscalated] = useState(false);
   const [escalating, setEscalating] = useState(false);
   const entrance = {
@@ -96,7 +117,7 @@ export default function MessageBubble({
       setEscalated(true);
       toast.success(t("expertRequested"), {
         description: t("expertRequestedBody"),
-        action: { label: t("viewCases"), onClick: () => window.location.assign("/cases") },
+        action: { label: t("viewCases"), onClick: () => router.push("/cases") },
       });
     } catch {
       toast.error(t("error"));
@@ -111,6 +132,8 @@ export default function MessageBubble({
         <SproutMark width={17} height={17} strokeWidth={2} />
       </span>
       <div className="min-w-0 flex-1 pt-1">
+        {message.replacing && <SproutLoader size={30} label={t("regenerating")} className="-mt-1 mb-2" />}
+        <div className={cx("transition-opacity duration-300", message.replacing && "pointer-events-none select-none opacity-45")}>
         {message.diagnosis && <DiagnosisCard diagnosis={message.diagnosis} image={sourceImage} />}
         {waiting ? (
           <SproutLoader size={34} label={t("thinking")} className="-mt-1" />
@@ -118,7 +141,8 @@ export default function MessageBubble({
           message.content && <Markdown content={message.content} streaming={streaming} />
         )}
         {!streaming && message.citations && message.citations.length > 0 && <CitationChips citations={message.citations} />}
-        {!streaming && message.content && (
+        </div>
+        {!streaming && !message.replacing && message.content && (
           <MessageActions
             content={message.content}
             feedback={message.feedback}
@@ -131,7 +155,7 @@ export default function MessageBubble({
             escalated={escalated}
           />
         )}
-        {isLatest && !streaming && onFollowUp && message.followUps && (
+        {isLatest && !streaming && !message.replacing && onFollowUp && message.followUps && (
           <FollowUpChips items={message.followUps} onPick={onFollowUp} />
         )}
       </div>

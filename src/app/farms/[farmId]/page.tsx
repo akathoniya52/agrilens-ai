@@ -18,6 +18,7 @@ import RemindersPanel from "@/components/farm/RemindersPanel";
 import WeatherWidget from "@/components/farm/WeatherWidget";
 import { farmsApi, fieldsApi, remindersApi, type ReminderInput } from "@/components/farm/api";
 import type { FarmDetail, LngLat, ReminderDTO } from "@/types/farm";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 type Draft = { ring: LngLat[] | null } | null;
 
@@ -34,7 +35,7 @@ export default function FarmDetailPage({ params }: { params: Promise<{ farmId: s
   const [draft, setDraft] = useState<Draft>(null);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
     if (status !== "authenticated") return;
     let cancelled = false;
     Promise.all([farmsApi.get(farmId), remindersApi.list({ farmId })])
@@ -67,13 +68,15 @@ export default function FarmDetailPage({ params }: { params: Promise<{ farmId: s
   const { farm, fields, diagnoses } = detail;
   const selected = fields.find((f) => f._id === selectedId) ?? null;
 
-  async function createReminders(inputs: ReminderInput[]) {
+  async function createReminders(inputs: ReminderInput[]): Promise<boolean> {
     try {
       const created = await remindersApi.createMany(inputs.map((i) => ({ ...i, farmId })));
       setReminders((prev) => [...prev, ...created].sort((a, b) => a.dueAt.localeCompare(b.dueAt)));
       toast.success(t("remindersAdded", { count: created.length }));
+      return true;
     } catch {
       toast.error(tc("error"));
+      return false;
     }
   }
 
@@ -89,7 +92,17 @@ export default function FarmDetailPage({ params }: { params: Promise<{ farmId: s
 
   async function deleteReminder(reminder: ReminderDTO) {
     setReminders((prev) => prev.filter((r) => r._id !== reminder._id));
-    await remindersApi.remove(reminder._id).catch(() => toast.error(tc("error")));
+    try {
+      await remindersApi.remove(reminder._id);
+    } catch {
+      // Still on the server and still notifying, so put it back.
+      setReminders((prev) =>
+        prev.some((r) => r._id === reminder._id)
+          ? prev
+          : [...prev, reminder].sort((a, b) => a.dueAt.localeCompare(b.dueAt))
+      );
+      toast.error(tc("error"));
+    }
   }
 
   async function deleteField(fieldId: string, name: string) {

@@ -37,6 +37,12 @@ export interface YieldInput {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** The calendar's harvest task (e.g. cotton's first picking), so both views agree; else the end of the last stage. */
+function calendarHarvestDate(crop: string, sowingDate: Date | string): string | null {
+  const calendar = buildCropCalendar(crop, sowingDate);
+  return calendar.tasks.find((task) => task.kind === "harvest")?.date ?? calendar.stages.at(-1)?.endDate ?? null;
+}
+
 export function estimateYield({ crop, areaHa, sowingDate, recentSeverity, ndvi }: YieldInput): YieldEstimate {
   const cropKey = resolveCropKey(crop);
   const base = BASE_YIELD_T_HA[cropKey];
@@ -48,7 +54,7 @@ export function estimateYield({ crop, areaHa, sowingDate, recentSeverity, ndvi }
   if (vegetation !== null && ndvi !== null && ndvi !== undefined) {
     factors.push({ key: "ndvi", label: `Satellite NDVI ${ndvi.toFixed(2)}`, multiplier: vegetation });
   }
-  const harvestDate = sowingDate ? buildCropCalendar(crop, sowingDate).stages.at(-1)?.endDate ?? null : null;
+  const harvestDate = sowingDate ? calendarHarvestDate(crop, sowingDate) : null;
 
   if (base === null) {
     return { crop, areaHa, perHa: null, total: null, low: null, high: null, harvestDate, factors, basis: "heuristic" };

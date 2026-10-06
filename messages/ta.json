@@ -246,7 +246,7 @@
     "notHelpful": "பயனில்லை",
     "dropImage": "இணைக்கப் படத்தை இங்கே விடுங்கள்",
     "removeAttachment": "படத்தை நீக்கு",
-    "imageTooLarge": "படங்கள் 5 MB அல்லது அதற்குக் குறைவாக இருக்க வேண்டும்.",
+    "imageTooLarge": "படங்கள் 4 MB அல்லது அதற்குக் குறைவாக இருக்க வேண்டும்.",
     "uploadFailed": "பதிவேற்றம் தோல்வியடைந்தது. மீண்டும் முயலவும்.",
     "error": "ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "ஆதாரங்கள்",
     "queuedSent": "{count, plural, one {# queued message sent} other {# queued messages sent}}",
     "queuedNoCredits": "Queued messages will be sent once you have credits again.",
-    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically."
+    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically.",
+    "busy": "இந்த உரையாடலில் ஏற்கனவே ஒரு பதில் எழுதப்படுகிறது. அது முடியும் வரை காத்திருக்கவும்.",
+    "loadOlder": "முந்தைய செய்திகளை ஏற்று",
+    "loadOlderFailed": "முந்தைய செய்திகளை ஏற்ற முடியவில்லை.",
+    "chatNotFound": "இந்த உரையாடல் இல்லை அல்லது நீக்கப்பட்டது.",
+    "noAnswerYet": "இந்தக் கேள்விக்கு இன்னும் பதில் கிடைக்கவில்லை.",
+    "regenerating": "புதிய பதில் எழுதப்படுகிறது…",
+    "uploadFailedBlock": "சில படங்கள் பதிவேற்றப்படவில்லை. அனுப்ப மீண்டும் முயலவும் அல்லது அவற்றை நீக்கவும்.",
+    "retryUpload": "மீண்டும் பதிவேற்று"
   },
   "farms": {
     "title": "என் பண்ணைகள்",
@@ -570,7 +578,9 @@
       "chart": "NDVI over the last 90 days",
       "showMap": "Show NDVI map",
       "hideMap": "Hide NDVI map",
-      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)",
+      "mapDate": "{date} அன்று எடுத்த படத்தின் வரைபடம் · மேகமூட்டமான பகுதிகள் காலியாக விடப்பட்டுள்ளன",
+      "noMap": "கடந்த 90 நாட்களில் இந்த வயலின் தெளிவான செயற்கைக்கோள் படம் கிடைக்கவில்லை."
     },
     "yield": {
       "title": "Yield estimate",
@@ -616,7 +626,8 @@
     },
     "chart": "Price trend with 7-day forecast",
     "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
-    "buildingHistory": "Trend builds up as daily prices are collected."
+    "buildingHistory": "Trend builds up as daily prices are collected.",
+    "stale": "நேரடி விலைகளைப் புதுப்பிக்க முடியவில்லை, எனவே இந்தச் சேமித்த விலைகள் பழையதாக இருக்கலாம்."
   },
   "radar": {
     "title": "Outbreak radar",
@@ -652,7 +663,8 @@
     "failed": "Couldn't analyse the photo. Check your connection.",
     "continue": "Continue in chat",
     "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
-    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter.",
+    "imageTooLarge": "இந்தப் படம் பதிவேற்ற மிகப் பெரியது (அதிகபட்சம் 4 MB)."
   },
   "onDevice": {
     "label": "On-device guess",

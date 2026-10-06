@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { isExpert, serializeCase } from "@/lib/cases";
 import { findOwnedChat } from "@/lib/chat-service";
-import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
+import { isDuplicateKey, isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { Case } from "@/lib/models/Case";
 import { Message } from "@/lib/models/Message";
 import { User } from "@/lib/models/User";
@@ -58,7 +58,9 @@ export async function POST(req: NextRequest) {
     const chat = await findOwnedChat(message.chatId.toString(), user._id);
     if (!chat) return jsonError("Message not found", 404);
 
-    const existing = await Case.findOne({ messageId: message._id, userId: user._id, status: { $ne: "resolved" } }).lean();
+    const findActive = () =>
+      Case.findOne({ messageId: message._id, userId: user._id, status: { $ne: "resolved" } }).lean();
+    const existing = await findActive();
     if (existing) return NextResponse.json(serializeCase(existing));
 
     const question = await Message.findOne({ chatId: chat._id, role: "user", createdAt: { $lte: message.createdAt } })
@@ -73,18 +75,27 @@ export async function POST(req: NextRequest) {
         }
       : null;
 
-    const created = await Case.create({
-      userId: user._id,
-      chatId: chat._id,
-      messageId: message._id,
-      snapshot: {
-        question: question?.content ?? "",
-        answer: message.content,
-        imageUrls: (question?.attachments ?? []).filter((a) => a.type.startsWith("image/")).map((a) => a.url),
-        diagnosis,
-      },
-      notes: parsed.data.note ? [{ author: user.name || user.email, role: "farmer", text: parsed.data.note, at: new Date() }] : [],
-    });
+    let created;
+    try {
+      created = await Case.create({
+        userId: user._id,
+        chatId: chat._id,
+        messageId: message._id,
+        snapshot: {
+          question: question?.content ?? "",
+          answer: message.content,
+          imageUrls: (question?.attachments ?? []).filter((a) => a.type.startsWith("image/")).map((a) => a.url),
+          diagnosis,
+        },
+        notes: parsed.data.note ? [{ author: user.name || user.email, role: "farmer", text: parsed.data.note, at: new Date() }] : [],
+      });
+    } catch (error) {
+      // Lost a race with a concurrent request for the same message: return the case it opened.
+      if (!isDuplicateKey(error)) throw error;
+      const winner = await findActive();
+      if (!winner) return jsonError("Case already exists", 409);
+      return NextResponse.json(serializeCase(winner));
+    }
     return NextResponse.json(serializeCase(created.toObject()), { status: 201 });
   } catch (error) {
     return serverError("POST /api/cases", error);

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useLocale, useTranslations } from "next-intl";
@@ -11,6 +11,9 @@ import { useTheme, hasStoredTheme } from "@/components/ThemeProvider";
 import { isTheme } from "@/components/theme";
 import { CREDITS_EVENT, getJson, type Me } from "@/components/account";
 import { cx } from "@/components/ui";
+import { DEFAULT_CALLBACK_URL, safeCallbackUrl } from "@/lib/callback-url";
+import { signOutCleanly } from "@/lib/client/sign-out";
+import { syncTimeZone } from "@/lib/client/time-zone-sync";
 import {
   ChartIcon,
   CameraIcon,
@@ -32,6 +35,13 @@ const LINKS = [
   { href: "/scan", key: "scan", Icon: CameraIcon },
   { href: "/cases", key: "cases", Icon: ShieldIcon },
 ] as const;
+
+/** Where to return after signing in from the navbar: the current page (the landing page goes to chat). */
+function navbarCallbackUrl(): string {
+  const { pathname, search } = window.location;
+  if (pathname.startsWith("/auth/signin")) return safeCallbackUrl(new URLSearchParams(search).get("callbackUrl"));
+  return pathname === "/" ? DEFAULT_CALLBACK_URL : safeCallbackUrl(pathname + search);
+}
 
 function Avatar({ src, name, size }: { src?: string | null; name?: string | null; size: number }) {
   return src ? (
@@ -62,8 +72,9 @@ export default function Navbar() {
         setCredits(me.credits);
         // First visit on this device: adopt the theme saved on the account.
         if (!hasStoredTheme() && isTheme(me.theme)) setTheme(me.theme, { sync: false });
+        void syncTimeZone(me);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => console.warn("[navbar] could not load /api/me", error instanceof Error ? error.message : error));
     return () => {
       cancelled = true;
     };
@@ -252,7 +263,7 @@ export default function Navbar() {
                         role="menuitem"
                         onClick={() => {
                           setMenuOpen(false);
-                          void signOut({ callbackUrl: "/" });
+                          void signOutCleanly();
                         }}
                         className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/10"
                       >
@@ -267,7 +278,7 @@ export default function Navbar() {
           ) : (
             <button
               type="button"
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: navbarCallbackUrl() })}
               className="flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg transition hover:brightness-110 active:scale-[0.98]"
             >
               <span className="hidden sm:inline">{t("signInGoogle")}</span>

@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import { compressImage, isImageFile } from "@/lib/image-compress";
 import type { Attachment } from "@/types/chat";
 import { uploadImage } from "./chat-api";
+import { pickRestorable } from "./draft";
 
 export const MAX_ATTACHMENTS = 4;
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 export interface PendingImage {
   id: string;
@@ -30,6 +31,7 @@ export function useAttachments() {
   const t = useTranslations("chat");
   const [items, setItems] = useState<PendingImage[]>([]);
   const previews = useRef(new Set<string>());
+  const sources = useRef(new Map<string, File>());
 
   useEffect(() => {
     const urls = previews.current;
@@ -48,7 +50,9 @@ export function useAttachments() {
     }
     try {
       const uploaded = await uploadImage(blob, name);
-      patch(id, { status: "ready", attachment: { ...uploaded, ...(width && height ? { width, height } : {}) } });
+      const size = uploaded.width && uploaded.height ? {} : width && height ? { width, height } : {};
+      patch(id, { status: "ready", attachment: { ...uploaded, ...size } });
+      sources.current.delete(id);
     } catch {
       patch(id, { status: "error" });
       toast.error(t("uploadFailed"));
@@ -66,6 +70,7 @@ export function useAttachments() {
     const accepted = images.slice(0, Math.max(0, room)).map((file) => {
       const preview = URL.createObjectURL(file);
       previews.current.add(preview);
+      sources.current.set(preview, file);
       return { file, item: { id: preview, preview, status: "uploading" as const } };
     });
     if (!accepted.length) return;
@@ -77,14 +82,32 @@ export function useAttachments() {
     setItems((list) => list.filter((item) => item.id !== id));
     URL.revokeObjectURL(id);
     previews.current.delete(id);
+    sources.current.delete(id);
+  }
+
+  function retry(id: string) {
+    const file = sources.current.get(id);
+    if (!file) {
+      remove(id);
+      return;
+    }
+    patch(id, { status: "uploading" });
+    void upload(id, file);
   }
 
   function clear() {
     items.forEach((item) => remove(item.id));
   }
 
+  /** Adds a failed send's images back next to anything attached since, instead of replacing the tray. */
   function restore(attachments: Attachment[]) {
-    setItems(attachments.map((attachment, i) => ({ id: `restored-${i}-${attachment.url.slice(-12)}`, preview: attachment.url, status: "ready", attachment })));
+    setItems((list) => {
+      const urls = list.flatMap((item) => (item.attachment ? [item.attachment.url] : []));
+      const restored = pickRestorable(urls, attachments, MAX_ATTACHMENTS - list.length).map(
+        (attachment): PendingImage => ({ id: `restored-${crypto.randomUUID()}`, preview: attachment.url, status: "ready", attachment })
+      );
+      return [...restored, ...list];
+    });
   }
 
   return {
@@ -93,6 +116,8 @@ export function useAttachments() {
     remove,
     clear,
     restore,
+    retry,
+    failed: items.some((item) => item.status === "error"),
     uploading: items.some((item) => item.status === "uploading"),
     ready: items.flatMap((item) => (item.status === "ready" && item.attachment ? [item.attachment] : [])),
   };

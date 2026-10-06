@@ -246,7 +246,7 @@
     "notHelpful": "Não foi útil",
     "dropImage": "Solte uma imagem para anexar",
     "removeAttachment": "Remover imagem",
-    "imageTooLarge": "As imagens devem ter 5 MB ou menos.",
+    "imageTooLarge": "As imagens devem ter 4 MB ou menos.",
     "uploadFailed": "O envio falhou. Tente novamente.",
     "error": "Algo deu errado. Tente novamente.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "Fontes",
     "queuedSent": "{count, plural, one {# mensagem na fila enviada} other {# mensagens na fila enviadas}}",
     "queuedNoCredits": "As mensagens na fila serão enviadas quando você tiver créditos novamente.",
-    "queuedRetry": "Ainda não foi possível enviar as mensagens na fila. Tentaremos novamente automaticamente."
+    "queuedRetry": "Ainda não foi possível enviar as mensagens na fila. Tentaremos novamente automaticamente.",
+    "busy": "Já está sendo escrita uma resposta neste chat. Aguarde até terminar.",
+    "loadOlder": "Carregar mensagens anteriores",
+    "loadOlderFailed": "Não foi possível carregar as mensagens anteriores.",
+    "chatNotFound": "Esta conversa não existe ou foi excluída.",
+    "noAnswerYet": "Esta pergunta ainda não foi respondida.",
+    "regenerating": "Escrevendo uma nova resposta…",
+    "uploadFailedBlock": "Algumas imagens não foram enviadas. Tente de novo ou remova-as para enviar.",
+    "retryUpload": "Tentar enviar de novo"
   },
   "farms": {
     "title": "Minhas propriedades",
@@ -570,7 +578,9 @@
       "chart": "NDVI nos últimos 90 dias",
       "showMap": "Mostrar mapa NDVI",
       "hideMap": "Ocultar mapa NDVI",
-      "mapAlt": "Mapa de calor NDVI do talhão (vermelho = estresse, verde = saudável)"
+      "mapAlt": "Mapa de calor NDVI do talhão (vermelho = estresse, verde = saudável)",
+      "mapDate": "Mapa da passagem de {date} · áreas com nuvens ficam em branco",
+      "noMap": "Nenhuma imagem de satélite sem nuvens deste talhão nos últimos 90 dias."
     },
     "yield": {
       "title": "Estimativa de produtividade",
@@ -616,7 +626,8 @@
     },
     "chart": "Tendência de preço com previsão de 7 dias",
     "forecastNote": "Linha tracejada: previsão de tendência linear, não é aconselhamento financeiro.",
-    "buildingHistory": "A tendência se forma à medida que os preços diários são coletados."
+    "buildingHistory": "A tendência se forma à medida que os preços diários são coletados.",
+    "stale": "Não foi possível atualizar os preços ao vivo; estes preços salvos podem estar desatualizados."
   },
   "radar": {
     "title": "Radar de surtos",
@@ -652,7 +663,8 @@
     "failed": "Não foi possível analisar a foto. Verifique sua conexão.",
     "continue": "Continuar no chat",
     "noModel": "A detecção no dispositivo não está configurada — capture uma foto e o AgriLens vai analisá-la online.",
-    "tip": "Preencha o enquadramento com as folhas afetadas sob boa luz do dia e toque no obturador."
+    "tip": "Preencha o enquadramento com as folhas afetadas sob boa luz do dia e toque no obturador.",
+    "imageTooLarge": "Esta foto é grande demais para enviar (máx. 4 MB)."
   },
   "onDevice": {
     "label": "Palpite no dispositivo",

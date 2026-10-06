@@ -246,7 +246,7 @@
     "notHelpful": "Haisaidii",
     "dropImage": "Dondosha picha hapa kuiambatisha",
     "removeAttachment": "Ondoa picha",
-    "imageTooLarge": "Picha lazima ziwe MB 5 au chini.",
+    "imageTooLarge": "Picha lazima ziwe MB 4 au chini.",
     "uploadFailed": "Kupakia kumeshindwa. Tafadhali jaribu tena.",
     "error": "Hitilafu imetokea. Tafadhali jaribu tena.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "Vyanzo",
     "queuedSent": "{count, plural, one {# queued message sent} other {# queued messages sent}}",
     "queuedNoCredits": "Queued messages will be sent once you have credits again.",
-    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically."
+    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically.",
+    "busy": "Jibu tayari linaandikwa kwenye mazungumzo haya. Tafadhali subiri likamilike.",
+    "loadOlder": "Pakia jumbe za awali",
+    "loadOlderFailed": "Imeshindwa kupakia jumbe za awali.",
+    "chatNotFound": "Mazungumzo haya hayapo au yamefutwa.",
+    "noAnswerYet": "Swali hili bado halijajibiwa.",
+    "regenerating": "Inaandika jibu jipya…",
+    "uploadFailedBlock": "Baadhi ya picha hazikupakiwa. Jaribu tena au ziondoe ili kutuma.",
+    "retryUpload": "Pakia tena"
   },
   "farms": {
     "title": "Mashamba yangu",
@@ -570,7 +578,9 @@
       "chart": "NDVI over the last 90 days",
       "showMap": "Show NDVI map",
       "hideMap": "Hide NDVI map",
-      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)",
+      "mapDate": "Ramani ya picha ya {date} · maeneo yenye mawingu yameachwa wazi",
+      "noMap": "Hakuna picha safi ya setilaiti ya shamba hili katika siku 90 zilizopita."
     },
     "yield": {
       "title": "Makadirio ya mavuno",
@@ -616,7 +626,8 @@
     },
     "chart": "Price trend with 7-day forecast",
     "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
-    "buildingHistory": "Trend builds up as daily prices are collected."
+    "buildingHistory": "Trend builds up as daily prices are collected.",
+    "stale": "Bei za sasa hazikuweza kusasishwa, kwa hiyo bei hizi zilizohifadhiwa huenda zimepitwa na wakati."
   },
   "radar": {
     "title": "Outbreak radar",
@@ -652,7 +663,8 @@
     "failed": "Couldn't analyse the photo. Check your connection.",
     "continue": "Endelea kwenye gumzo",
     "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
-    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter.",
+    "imageTooLarge": "Picha hii ni kubwa mno kupakiwa (kiwango cha juu MB 4)."
   },
   "onDevice": {
     "label": "On-device guess",

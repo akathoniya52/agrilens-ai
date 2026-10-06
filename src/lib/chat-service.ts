@@ -15,6 +15,38 @@ function unsummarized(chat: ChatDoc) {
   return chat.summarizedUpTo ? { $gt: chat.summarizedUpTo } : undefined;
 }
 
+/** A lock older than this is treated as abandoned (the function limit is 60 s). */
+export const GENERATION_LOCK_MS = 90_000;
+
+export interface GenerationLock {
+  chatId: Types.ObjectId;
+  token: Date;
+}
+
+/**
+ * Atomically marks the user's chat as generating so two answers can't run (and be charged) at once.
+ * Returns null when another answer in this chat is still in progress.
+ */
+export async function acquireGenerationLock(chatId: Types.ObjectId, userId: Types.ObjectId): Promise<GenerationLock | null> {
+  const token = new Date();
+  const staleBefore = new Date(token.getTime() - GENERATION_LOCK_MS);
+  const locked = await Chat.findOneAndUpdate(
+    {
+      _id: chatId,
+      userId,
+      $or: [{ generatingAt: null }, { generatingAt: { $exists: false } }, { generatingAt: { $lt: staleBefore } }],
+    },
+    { $set: { generatingAt: token } },
+    { projection: { _id: 1 } }
+  ).lean();
+  return locked ? { chatId, token } : null;
+}
+
+/** Releases only our own lock, never one taken over after it went stale. */
+export async function releaseGenerationLock(lock: GenerationLock): Promise<void> {
+  await Chat.updateOne({ _id: lock.chatId, generatingAt: lock.token }, { $set: { generatingAt: null } });
+}
+
 export async function findOwnedChat(chatId: string, userId: Types.ObjectId): Promise<ChatDoc | null> {
   return Chat.findOne({ _id: chatId, userId });
 }

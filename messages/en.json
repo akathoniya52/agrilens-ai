@@ -246,7 +246,7 @@
     "notHelpful": "Not helpful",
     "dropImage": "Drop an image to attach",
     "removeAttachment": "Remove image",
-    "imageTooLarge": "Images must be 5 MB or smaller.",
+    "imageTooLarge": "Images must be 4 MB or smaller.",
     "uploadFailed": "Upload failed. Please try again.",
     "error": "Something went wrong. Please try again.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "Sources",
     "queuedSent": "{count, plural, one {# queued message sent} other {# queued messages sent}}",
     "queuedNoCredits": "Queued messages will be sent once you have credits again.",
-    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically."
+    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically.",
+    "busy": "An answer is already being written in this chat. Please wait for it to finish.",
+    "loadOlder": "Load earlier messages",
+    "loadOlderFailed": "Couldn't load earlier messages.",
+    "chatNotFound": "This conversation doesn't exist or was deleted.",
+    "noAnswerYet": "This question hasn't been answered yet.",
+    "regenerating": "Writing a new answer…",
+    "uploadFailedBlock": "Some images didn't upload. Retry or remove them to send.",
+    "retryUpload": "Retry upload"
   },
   "farms": {
     "title": "My farms",
@@ -570,7 +578,9 @@
       "chart": "NDVI over the last 90 days",
       "showMap": "Show NDVI map",
       "hideMap": "Hide NDVI map",
-      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)",
+      "mapDate": "Map from the {date} pass · cloudy areas are left blank",
+      "noMap": "No clear satellite image of this field in the last 90 days."
     },
     "yield": {
       "title": "Yield estimate",
@@ -616,7 +626,8 @@
     },
     "chart": "Price trend with 7-day forecast",
     "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
-    "buildingHistory": "Trend builds up as daily prices are collected."
+    "buildingHistory": "Trend builds up as daily prices are collected.",
+    "stale": "Live prices couldn't be refreshed, so these saved prices may be outdated."
   },
   "radar": {
     "title": "Outbreak radar",
@@ -652,7 +663,8 @@
     "failed": "Couldn't analyse the photo. Check your connection.",
     "continue": "Continue in chat",
     "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
-    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter.",
+    "imageTooLarge": "This photo is too large to upload (4 MB max)."
   },
   "onDevice": {
     "label": "On-device guess",

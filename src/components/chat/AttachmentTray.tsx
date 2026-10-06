@@ -4,10 +4,16 @@ import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslations } from "next-intl";
 import { cx } from "@/components/ui";
-import { CloseIcon } from "./icons";
+import { CloseIcon, RefreshIcon } from "./icons";
 import type { PendingImage } from "./useAttachments";
 
-export default function AttachmentTray({ items, onRemove }: { items: PendingImage[]; onRemove: (id: string) => void }) {
+interface AttachmentTrayProps {
+  items: PendingImage[];
+  onRemove: (id: string) => void;
+  onRetry: (id: string) => void;
+}
+
+export default function AttachmentTray({ items, onRemove, onRetry }: AttachmentTrayProps) {
   const t = useTranslations("chat");
 
   return (
@@ -34,6 +40,17 @@ export default function AttachmentTray({ items, onRemove }: { items: PendingImag
                   <span className="chat-progress block h-full w-1/2 rounded-full bg-accent" />
                 </span>
               </span>
+            )}
+            {item.status === "error" && (
+              <button
+                type="button"
+                onClick={() => onRetry(item.id)}
+                aria-label={t("retryUpload")}
+                title={t("retryUpload")}
+                className="absolute inset-0 flex items-center justify-center bg-danger/35 text-surface backdrop-blur-[1px] transition-colors hover:bg-danger/50"
+              >
+                <RefreshIcon width={18} height={18} strokeWidth={2.4} />
+              </button>
             )}
             <button
               type="button"

@@ -10,6 +10,11 @@ export interface IReminder {
   kind: ReminderKind;
   done: boolean;
   notifiedAt?: Date | null;
+  /** Cron lease: set while a run is sending; a stale lease (crashed run) may be re-claimed. */
+  claimedAt?: Date | null;
+  /** Send attempts so far; the cron gives up after a few. */
+  attempts?: number;
+  failedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +31,9 @@ const ReminderSchema = new Schema<IReminder>(
     kind: { type: String, enum: REMINDER_KINDS, default: "custom" },
     done: { type: Boolean, default: false },
     notifiedAt: { type: Date, default: null },
+    claimedAt: { type: Date, default: null },
+    attempts: { type: Number, default: 0 },
+    failedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

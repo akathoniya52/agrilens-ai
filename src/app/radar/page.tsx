@@ -9,6 +9,7 @@ import { GlobeIcon, ShieldIcon } from "@/components/icons";
 import { insightsApi } from "@/components/insights/api";
 import OutbreakMapLoader from "@/components/insights/OutbreakMapLoader";
 import type { OutbreakResponse } from "@/types/insights";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 const RADII = [25, 50, 100, 250] as const;
 const WINDOWS = [7, 14, 30, 90] as const;
@@ -33,7 +34,7 @@ export default function RadarPage() {
   const key = `${radiusKm}|${days}|${point?.lat ?? ""}|${point?.lon ?? ""}`;
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
     if (status !== "authenticated") return;
     let cancelled = false;
     insightsApi

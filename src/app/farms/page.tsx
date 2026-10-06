@@ -13,6 +13,7 @@ import FarmForm from "@/components/farm/FarmForm";
 import WeatherWidget from "@/components/farm/WeatherWidget";
 import { farmsApi } from "@/components/farm/api";
 import type { FarmDTO } from "@/types/farm";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 export default function FarmsPage() {
   const t = useTranslations("farms");
@@ -35,7 +36,7 @@ export default function FarmsPage() {
   }, [tc]);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
     if (status !== "authenticated") return;
     let cancelled = false;
     farmsApi

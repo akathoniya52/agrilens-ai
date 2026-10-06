@@ -1,4 +1,4 @@
-import type { Types } from "mongoose";
+import mongoose, { type ClientSession, type Types } from "mongoose";
 import { Farm, type IFarm } from "@/lib/models/Farm";
 import { Field, type IField } from "@/lib/models/Field";
 import type { IReminder } from "@/lib/models/Reminder";
@@ -85,4 +85,34 @@ export function findOwnedFarm(farmId: string, userId: Id) {
 
 export function findOwnedField(fieldId: string, userId: Id) {
   return Field.findOne({ _id: fieldId, userId });
+}
+
+/** MongoDB refused to index a geometry (16755 "Can't extract geo keys"); the input was bad, not the server. */
+export function isGeoIndexError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === 16755) return true;
+  return "message" in error && typeof error.message === "string" && error.message.includes("Can't extract geo keys");
+}
+
+/** Standalone MongoDB (local dev) has no transactions: IllegalOperation (20) on the first write. */
+function isTransactionUnsupported(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === 20) return true;
+  return "message" in error && typeof error.message === "string" && error.message.includes("Transaction numbers are only allowed");
+}
+
+/**
+ * Runs `work` in a transaction, or without one where the deployment can't do transactions.
+ * `work` may be retried by the driver, so it must be idempotent and run its operations in sequence.
+ */
+export async function withOptionalTransaction(work: (session: ClientSession | undefined) => Promise<void>): Promise<void> {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(() => work(session));
+  } catch (error) {
+    if (!isTransactionUnsupported(error)) throw error;
+    await work(undefined);
+  } finally {
+    await session.endSession();
+  }
 }

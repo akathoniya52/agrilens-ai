@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { signInUrl } from "@/lib/callback-url";
 import { useTranslations } from "next-intl";
 import { FadeIn, Skeleton } from "@/components/ui";
 import ScanCamera from "@/components/scan/ScanCamera";
@@ -13,7 +14,7 @@ export default function ScanPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrl(window.location.pathname + window.location.search));
   }, [status, router]);
 
   return (

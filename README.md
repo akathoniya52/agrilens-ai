@@ -86,10 +86,10 @@ Details and defaults for the Phase 4 variables are in [Phase 4 integrations](#ph
 |---|---|---|
 | GET / POST | `/api/chats` | List (with `?q=` title search, sorted by `lastMessageAt`) or create a chat |
 | PATCH / DELETE | `/api/chats/[chatId]` | Rename or delete a chat |
-| GET / POST | `/api/chats/[chatId]/messages` | List messages, or send one; POST returns an `application/x-ndjson` stream. `regenerate: true` re-answers the last user message. Optional `clientId` (UUID) makes retries idempotent: a duplicate returns 409 and is not charged. Returns 402 when out of credits |
+| GET / POST | `/api/chats/[chatId]/messages` | List messages, or send one; POST returns an `application/x-ndjson` stream. `regenerate: true` re-answers the last user message. Optional `clientId` (UUID) makes retries idempotent and is not charged: a duplicate returns 200 `{ status: "answered", messages }`, or 409 `{ code: "unanswered" }` when it never got an answer (use Regenerate). 409 `{ code: "busy" }` while another answer is being generated. GET takes `?limit=` (1–100, default 50) and `?before=<messageId>` for older pages. Returns 402 when out of credits |
 | PATCH | `/api/messages/[messageId]/feedback` | `{ feedback: "up" \| "down" \| null }` |
-| POST | `/api/upload` | Multipart `file` (JPEG/PNG/WebP/HEIC, ≤ 5MB) → `Attachment` |
-| POST | `/api/transcribe` | Multipart `audio` (≤ 10MB) → `{ text, credits }`. Costs 1 credit (refunded on failure or empty text); 402 when out of credits |
+| POST | `/api/upload` | Multipart `file` (JPEG/PNG/WebP/HEIC, ≤ 4MB) → `Attachment` (with `width`/`height`) |
+| POST | `/api/transcribe` | Multipart `audio` (≤ 4MB) → `{ text, credits }`. Costs 1 credit (refunded on failure or empty text); 402 when out of credits |
 | GET / PATCH | `/api/me` | Profile and preferences (language, theme, notifications) |
 | GET | `/api/stats` | Usage aggregates |
 | GET / POST | `/api/farms` | List or create farms |

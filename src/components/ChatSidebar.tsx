@@ -25,16 +25,30 @@ interface ChatSidebarProps {
 type Menu = { chatId: string; x: number; y: number };
 
 const MENU_WIDTH = 176;
+const TODAY_REFRESH_MS = 60_000;
 const menuItem = "flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 text-left text-sm font-medium transition-colors";
 
 export default function ChatSidebar({ list, selectedChatId, onSelectChat, onNewChat, open, onClose }: ChatSidebarProps) {
   const t = useTranslations("chat");
   const tc = useTranslations("common");
-  const [todayStart] = useState(startOfToday);
+  const [todayStart, setTodayStart] = useState(startOfToday);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const rows = toChatRows(list.chats, todayStart);
+
+  // Keep Today / Yesterday right across midnight and when the tab comes back from the background.
+  useEffect(() => {
+    const refresh = () => setTodayStart(startOfToday());
+    const timer = window.setInterval(refresh, TODAY_REFRESH_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
 
   useEffect(() => {
     if (!menu && !open) return;

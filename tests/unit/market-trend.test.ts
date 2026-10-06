@@ -1,5 +1,56 @@
 import { describe, expect, it } from "vitest";
-import { computeTrend, dailySeries, linearFit, parseMandiDate, parseMandiRecords } from "@/lib/market-trend";
+import {
+  computeTrend,
+  dailySeries,
+  linearFit,
+  parseMandiDate,
+  parseMandiRecords,
+  recentHistory,
+  summarizeMarket,
+  type MandiRecord,
+} from "@/lib/market-trend";
+
+const record = (date: string, modal: number, market = "Rajkot"): MandiRecord => ({
+  state: "Gujarat",
+  district: "Rajkot",
+  market,
+  commodity: "wheat",
+  variety: "",
+  date,
+  min: modal,
+  max: modal,
+  modal,
+});
+
+describe("recentHistory", () => {
+  it("returns newest-first rows in date order", () => {
+    const rows = [record("2026-09-03", 3), record("2026-09-02", 2), record("2026-09-01", 1)];
+    expect(recentHistory(rows, 5000).map((r) => r.date)).toEqual(["2026-09-01", "2026-09-02", "2026-09-03"]);
+  });
+
+  it("drops the oldest day when the cap may have cut it short", () => {
+    const rows = [record("2026-09-03", 3), record("2026-09-02", 2, "A"), record("2026-09-02", 2, "B"), record("2026-09-01", 1)];
+    expect(recentHistory(rows, 4).map((r) => r.date)).toEqual(["2026-09-02", "2026-09-02", "2026-09-03"]);
+    expect(recentHistory([record("2026-09-01", 1, "A"), record("2026-09-01", 1, "B")], 2)).toHaveLength(2);
+  });
+});
+
+describe("summarizeMarket", () => {
+  it("serves stored history marked stale when the live fetch failed", () => {
+    const result = summarizeMarket("Wheat", { state: "Gujarat" }, [record("2026-09-01", 2400), record("2026-09-02", 2500)], null);
+    expect(result).toMatchObject({ status: "ok", stale: true, state: "Gujarat", district: null });
+    expect(result.status === "ok" && result.latest).toMatchObject({ date: "2026-09-02", modal: 2500 });
+  });
+
+  it("lets live records replace stored ones for the same market and day", () => {
+    const result = summarizeMarket("Wheat", {}, [record("2026-09-02", 2500)], [record("2026-09-02", 2600)]);
+    expect(result).toMatchObject({ status: "ok", stale: false, latest: { modal: 2600, markets: 1 } });
+  });
+
+  it("reports no_data when nothing is left", () => {
+    expect(summarizeMarket("Wheat", {}, [], [])).toEqual({ status: "no_data", commodity: "Wheat", stale: false });
+  });
+});
 
 describe("parseMandiDate", () => {
   it("parses DD/MM/YYYY and ISO", () => {

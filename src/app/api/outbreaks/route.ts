@@ -12,6 +12,7 @@ import {
   OUTBREAK_MIN_ACCOUNT_AGE_DAYS,
   aggregateOutbreaks,
   cellsCoveringCircle,
+  optionalCoordParam,
 } from "@/lib/outbreaks";
 import type { LngLat } from "@/types/farm";
 import type { OutbreakResponse } from "@/types/insights";
@@ -20,8 +21,8 @@ const EARTH_RADIUS_KM = 6378.1;
 const MAX_RECORDS = 20_000;
 
 const QuerySchema = z.object({
-  lat: z.coerce.number().min(-90).max(90).optional(),
-  lon: z.coerce.number().min(-180).max(180).optional(),
+  lat: optionalCoordParam(-90, 90),
+  lon: optionalCoordParam(-180, 180),
   radiusKm: z.coerce.number().min(5).max(500).default(100),
   days: z.coerce.number().int().min(1).max(90).default(30),
 });
@@ -52,6 +53,7 @@ export async function GET(req: NextRequest) {
       severity: { $ne: "none" },
     })
       .select("userId condition crop severity location createdAt")
+      .sort({ createdAt: -1 })
       .limit(MAX_RECORDS)
       .lean();
 

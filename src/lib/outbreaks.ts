@@ -1,6 +1,15 @@
+import { z } from "zod";
 import type { Severity } from "@/types/chat";
 import type { LngLat } from "@/types/farm";
 import type { OutbreakCell } from "@/types/insights";
+
+/** Optional numeric query param; blank (`?lat=`) counts as missing, which z.coerce would read as 0. */
+export function optionalCoordParam(min: number, max: number) {
+  return z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.coerce.number().min(min).max(max).optional()
+  );
+}
 
 /** Minimum distinct farmers per cell+condition before anything is shown (k-anonymity). */
 export const OUTBREAK_K = 5;
@@ -81,6 +90,14 @@ export function bandCount(n: number): string {
   return "25+";
 }
 
+/**
+ * Distinct-farmer count rounded down to a multiple of k, so one more report in a cell doesn't
+ * visibly change the number (and reveal when a farmer reported). Callers only pass n >= k.
+ */
+export function roundUsers(n: number, k = OUTBREAK_K): number {
+  return Math.max(k, Math.floor(n / k) * k);
+}
+
 /** Monday (UTC) of the date's week, as YYYY-MM-DD. */
 export function weekStart(date: Date): string {
   const day = (date.getUTCDay() + 6) % 7;
@@ -127,16 +144,18 @@ export function aggregateOutbreaks(
     if (r.createdAt > bucket.latest) bucket.latest = r.createdAt;
   }
 
+  // Sorted only by published (rounded) values, so the order doesn't leak exact counts either.
   return [...buckets.values()]
     .filter((b) => b.users.size >= k)
-    .sort((a, b) => b.users.size - a.users.size || b.cases - a.cases)
+    .map((b) => ({ ...b, rounded: roundUsers(b.users.size, k), band: bandCount(b.cases) }))
+    .sort((a, b) => b.rounded - a.rounded || a.id.localeCompare(b.id))
     .map((b) => ({
       id: b.id,
       center: b.center,
       condition: b.condition,
       crop: [...b.crops.entries()].sort((a, z) => z[1] - a[1])[0]?.[0] ?? "",
-      cases: bandCount(b.cases),
-      users: b.users.size,
+      cases: b.band,
+      users: b.rounded,
       severity: b.severity,
       latest: weekStart(b.latest),
     }));

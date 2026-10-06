@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { CheckIcon, CloudRainIcon, SproutMark } from "@/components/icons";
 import { cx, Skeleton } from "@/components/ui";
+import type { NdviResponse } from "@/lib/ndvi";
 import type { FieldDTO } from "@/types/farm";
 import type { NdviResult, SensorSnapshot, YieldEstimate } from "@/types/insights";
 import { insightsApi } from "./api";
@@ -13,6 +14,16 @@ import Gauge from "./Gauge";
 import Sparkline from "./Sparkline";
 
 type Loadable<T> = { fieldId: string; data: T | null; failed: boolean } | null;
+
+const withSceneDate = (data: NdviResult): NdviResponse =>
+  data.status === "ok"
+    ? { ...data, sceneDate: "sceneDate" in data && typeof data.sceneDate === "string" ? data.sceneDate : null }
+    : data;
+
+function ndviImageSrc(fieldId: string, sceneDate: string | null) {
+  const url = insightsApi.ndviImageUrl(fieldId);
+  return sceneDate ? `${url}&${new URLSearchParams({ date: sceneDate })}` : url;
+}
 
 function ndviTone(value: number) {
   if (value >= 0.6) return "text-sev-none";
@@ -37,11 +48,14 @@ function Note({ children }: { children: ReactNode }) {
   return <p className="text-sm text-fg-muted">{children}</p>;
 }
 
-function NdviSection({ fieldId, state }: { fieldId: string; state: Loadable<NdviResult> }) {
+function NdviSection({ fieldId, state }: { fieldId: string; state: Loadable<NdviResponse> }) {
   const t = useTranslations("fieldInsights");
   const format = useFormatter();
   const [showImage, setShowImage] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const result = state?.fieldId === fieldId ? state : null;
+  // Sentinel-2 dates are UTC calendar days.
+  const day = (date: string) => format.dateTime(new Date(date), { day: "numeric", month: "short", timeZone: "UTC" });
 
   const data = result?.data ?? null;
   let body: ReactNode;
@@ -51,16 +65,15 @@ function NdviSection({ fieldId, state }: { fieldId: string; state: Loadable<Ndvi
   else if (data.status === "no_boundary") body = <Note>{t("ndvi.noBoundary")}</Note>;
   else if (data.status === "no_data") body = <Note>{t("ndvi.noData")}</Note>;
   else {
-    const { mean, change, latestDate, series } = data;
+    const { mean, change, latestDate, series, imageAvailable, sceneDate } = data;
     const declining = change !== null && change <= -0.05;
+    const src = ndviImageSrc(fieldId, sceneDate);
     body = (
       <>
         <div className="flex items-end justify-between gap-3">
           <div>
             <div className={cx("font-display text-3xl font-bold", ndviTone(mean))}>{mean.toFixed(2)}</div>
-            <p className="text-xs text-fg-subtle">
-              {t("ndvi.latest", { date: format.dateTime(new Date(latestDate), { day: "numeric", month: "short" }) })}
-            </p>
+            <p className="text-xs text-fg-subtle">{t("ndvi.latest", { date: day(latestDate) })}</p>
           </div>
           {change !== null && (
             <span className={cx("rounded-full border px-2.5 py-1 text-xs font-semibold", declining ? "border-danger/40 bg-danger/10 text-danger" : "border-border text-fg-muted")}>
@@ -76,19 +89,29 @@ function NdviSection({ fieldId, state }: { fieldId: string; state: Loadable<Ndvi
             <Sparkline label={t("ndvi.chart")} data={series.map((p) => ({ x: p.date, actual: p.mean }))} domain={[0, 1]} />
           </div>
         )}
-        <button type="button" onClick={() => setShowImage((v) => !v)} className="mt-2 text-xs font-semibold text-accent hover:underline">
-          {showImage ? t("ndvi.hideMap") : t("ndvi.showMap")}
-        </button>
-        {showImage && (
-          <Image
-            src={insightsApi.ndviImageUrl(fieldId)}
-            alt={t("ndvi.mapAlt")}
-            width={256}
-            height={256}
-            unoptimized
-            className="mt-2 aspect-square w-full max-w-64 rounded-xl border border-border bg-surface-3 object-contain"
-          />
+        {imageAvailable ? (
+          <button type="button" onClick={() => setShowImage((v) => !v)} className="mt-2 text-xs font-semibold text-accent hover:underline">
+            {showImage ? t("ndvi.hideMap") : t("ndvi.showMap")}
+          </button>
+        ) : (
+          <p className="mt-2 text-xs text-fg-subtle">{t("ndvi.noMap")}</p>
         )}
+        {imageAvailable && showImage && (failedSrc === src ? (
+          <p className="mt-2 text-xs text-fg-muted">{t("ndvi.failed")}</p>
+        ) : (
+          <>
+            <Image
+              src={src}
+              alt={t("ndvi.mapAlt")}
+              width={256}
+              height={256}
+              unoptimized
+              onError={() => setFailedSrc(src)}
+              className="mt-2 aspect-square w-full max-w-64 rounded-xl border border-border bg-surface-3 object-contain"
+            />
+            {sceneDate && <p className="mt-1 text-xs text-fg-subtle">{t("ndvi.mapDate", { date: day(sceneDate) })}</p>}
+          </>
+        ))}
       </>
     );
   }
@@ -271,7 +294,7 @@ function SensorSection({ fieldId }: { fieldId: string }) {
 }
 
 export default function FieldInsights({ field }: { field: FieldDTO }) {
-  const [ndvi, setNdvi] = useState<Loadable<NdviResult>>(null);
+  const [ndvi, setNdvi] = useState<Loadable<NdviResponse>>(null);
   const [estimate, setEstimate] = useState<Loadable<YieldEstimate>>(null);
   const fieldId = field._id;
   const boundaryKey = JSON.stringify(field.boundary?.coordinates ?? null);
@@ -280,6 +303,7 @@ export default function FieldInsights({ field }: { field: FieldDTO }) {
     let cancelled = false;
     insightsApi
       .ndvi(fieldId)
+      .then(withSceneDate)
       .catch(() => null)
       .then((data) => {
         if (cancelled) return;

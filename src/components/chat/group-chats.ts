@@ -6,6 +6,18 @@ export type ChatRow = { kind: "header"; key: ChatGroupKey } | { kind: "chat"; ch
 
 const DAY_MS = 86_400_000;
 
+export const byRecent = (a: ChatSummary, b: ChatSummary) => Date.parse(b.lastMessageAt) - Date.parse(a.lastMessageAt);
+
+/**
+ * Keeps chats created in this tab that a (possibly older) server list doesn't include yet,
+ * so a refresh racing with "new chat" can't make the new chat vanish from the sidebar.
+ */
+export function mergeLocalChats(server: ChatSummary[], local: ChatSummary[]): ChatSummary[] {
+  const known = new Set(server.map((chat) => chat._id));
+  const missing = local.filter((chat) => !known.has(chat._id));
+  return missing.length ? [...server, ...missing].sort(byRecent) : server;
+}
+
 export function startOfToday(): number {
   const now = new Date();
   now.setHours(0, 0, 0, 0);

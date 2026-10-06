@@ -6,6 +6,7 @@ import { SensorReading, type ISensorReading } from "@/lib/models/SensorReading";
 import { describeReading, serializeReading } from "@/lib/iot";
 import type { UserDoc } from "@/lib/models/User";
 import type { ContextSection } from "@/lib/prompts";
+import { resolveTimeZone } from "@/lib/timezone";
 import { getWeather, weatherSummary } from "@/lib/weather";
 
 const fmtLatLon = ([lon, lat]: [number, number]) => `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
@@ -47,12 +48,13 @@ export async function farmContext(user: UserDoc): Promise<ContextSection[]> {
     ].filter(Boolean);
 
     const now = new Date();
+    const timeZone = resolveTimeZone(user.timeZone);
     const sensors = await latestSensorLines(fields.map((f) => f._id), now);
     const fieldLines = fields.map((field) => {
       const parts = [`${field.name}: ${field.crop || "unknown crop"}`];
       if (field.areaHa) parts.push(`${field.areaHa.toFixed(2)} ha`);
       if (field.sowingDate) {
-        const info = cropStage(field.crop, field.sowingDate, now);
+        const info = cropStage(field.crop, field.sowingDate, now, timeZone);
         if (info.status === "growing") parts.push(`${info.das} days after sowing, ${info.stage?.label ?? "growing"} stage`);
         else if (info.status === "planned") parts.push(`sowing planned in ${-info.das} days`);
         else parts.push(`season finished (${info.das} days after sowing)`);

@@ -246,7 +246,7 @@
     "notHelpful": "ఉపయోగకరం కాదు",
     "dropImage": "జోడించడానికి ఫోటోను ఇక్కడ వదలండి",
     "removeAttachment": "ఫోటో తీసివేయి",
-    "imageTooLarge": "ఫోటోలు 5 MB లేదా అంతకంటే తక్కువ ఉండాలి.",
+    "imageTooLarge": "ఫోటోలు 4 MB లేదా అంతకంటే తక్కువ ఉండాలి.",
     "uploadFailed": "అప్‌లోడ్ విఫలమైంది. దయచేసి మళ్ళీ ప్రయత్నించండి.",
     "error": "ఏదో తప్పు జరిగింది. దయచేసి మళ్ళీ ప్రయత్నించండి.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "మూలాలు",
     "queuedSent": "{count, plural, one {# queued message sent} other {# queued messages sent}}",
     "queuedNoCredits": "Queued messages will be sent once you have credits again.",
-    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically."
+    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically.",
+    "busy": "ఈ చాట్‌లో ఇప్పటికే ఒక సమాధానం రాయబడుతోంది. అది పూర్తయ్యే వరకు వేచి ఉండండి.",
+    "loadOlder": "మునుపటి సందేశాలను లోడ్ చేయండి",
+    "loadOlderFailed": "మునుపటి సందేశాలను లోడ్ చేయలేకపోయాం.",
+    "chatNotFound": "ఈ సంభాషణ లేదు లేదా తొలగించబడింది.",
+    "noAnswerYet": "ఈ ప్రశ్నకు ఇంకా సమాధానం రాలేదు.",
+    "regenerating": "కొత్త సమాధానం రాయబడుతోంది…",
+    "uploadFailedBlock": "కొన్ని ఫోటోలు అప్‌లోడ్ కాలేదు. పంపడానికి మళ్లీ ప్రయత్నించండి లేదా వాటిని తీసివేయండి.",
+    "retryUpload": "మళ్లీ అప్‌లోడ్ చేయండి"
   },
   "farms": {
     "title": "నా పొలాలు",
@@ -570,7 +578,9 @@
       "chart": "NDVI over the last 90 days",
       "showMap": "Show NDVI map",
       "hideMap": "Hide NDVI map",
-      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)",
+      "mapDate": "{date} నాటి చిత్రం ఆధారంగా మ్యాప్ · మేఘాలు ఉన్న భాగాలు ఖాళీగా ఉంచాం",
+      "noMap": "గత 90 రోజుల్లో ఈ పొలానికి స్పష్టమైన ఉపగ్రహ చిత్రం లభించలేదు."
     },
     "yield": {
       "title": "Yield estimate",
@@ -616,7 +626,8 @@
     },
     "chart": "Price trend with 7-day forecast",
     "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
-    "buildingHistory": "Trend builds up as daily prices are collected."
+    "buildingHistory": "Trend builds up as daily prices are collected.",
+    "stale": "ప్రత్యక్ష ధరలను నవీకరించలేకపోయాం, కాబట్టి ఈ సేవ్ చేసిన ధరలు పాతవి కావచ్చు."
   },
   "radar": {
     "title": "Outbreak radar",
@@ -652,7 +663,8 @@
     "failed": "Couldn't analyse the photo. Check your connection.",
     "continue": "Continue in chat",
     "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
-    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter.",
+    "imageTooLarge": "ఈ ఫోటో అప్‌లోడ్ చేయడానికి చాలా పెద్దది (గరిష్టం 4 MB)."
   },
   "onDevice": {
     "label": "On-device guess",

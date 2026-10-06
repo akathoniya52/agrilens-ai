@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useTranslations } from "next-intl";
+import { useHasMounted } from "@/components/useHasMounted";
 import { cx } from "./cx";
 
 interface SproutLoaderProps {
@@ -17,7 +18,9 @@ const CYCLE = 2.6;
 /** "Thinking" indicator: a seedling grows inside a soft pulse ring, then resets. */
 export default function SproutLoader({ size = 40, label, className }: SproutLoaderProps) {
   const t = useTranslations("chat");
-  const reduce = useReducedMotion();
+  const prefersReduced = useReducedMotion();
+  // Apply reduced motion only after hydration so server and client render the same first frame.
+  const reduce = useHasMounted() && prefersReduced === true;
   const loop = { duration: CYCLE, repeat: Infinity, ease: "easeInOut" } as const;
 
   return (

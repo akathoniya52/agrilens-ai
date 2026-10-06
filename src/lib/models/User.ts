@@ -25,6 +25,10 @@ export interface IUser {
   pendingPhone?: string | null;
   phoneCodeHash?: string | null;
   phoneCodeExpiresAt?: Date | null;
+  /** IANA zone reported by the browser; see lib/timezone.ts for the fallback. */
+  timeZone?: string | null;
+  /** Last daily weather-alert check; the cron serves the oldest first. */
+  lastWeatherCheckAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,11 +59,14 @@ const UserSchema = new Schema<IUser>(
     pendingPhone: { type: String, default: undefined },
     phoneCodeHash: { type: String, default: undefined },
     phoneCodeExpiresAt: { type: Date, default: undefined },
+    timeZone: { type: String, default: undefined, maxlength: 64 },
+    lastWeatherCheckAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 UserSchema.index({ phone: 1 }, { unique: true, partialFilterExpression: { phone: { $type: "string" } } });
+UserSchema.index({ lastWeatherCheckAt: 1, _id: 1 });
 UserSchema.index({ pendingPhone: 1 }, { partialFilterExpression: { pendingPhone: { $type: "string" } } });
 
 export const User = (models.User as Model<IUser>) || model<IUser>("User", UserSchema);

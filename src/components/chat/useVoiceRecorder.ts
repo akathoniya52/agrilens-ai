@@ -11,6 +11,10 @@ export type VoiceState = "idle" | "recording" | "transcribing";
 
 const MAX_RECORDING_MS = 60_000;
 const MIN_AUDIO_BYTES = 1_000;
+// /api/transcribe accepts 4 MB; stop early enough that the final chunk can't push past it.
+const MAX_AUDIO_BYTES = 4 * 1024 * 1024 - 256 * 1024;
+const AUDIO_BITS_PER_SECOND = 32_000;
+const CHUNK_MS = 250;
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus", "audio/webm"];
 
 interface Session {
@@ -18,12 +22,25 @@ interface Session {
   stream: MediaStream;
   audio: AudioContext;
   timer: number;
+  /** Set when the component unmounts: the recording is thrown away instead of transcribed. */
+  cancelled: boolean;
 }
+
+const stopTracks = (stream: MediaStream) => stream.getTracks().forEach((track) => track.stop());
 
 function teardown(session: Session) {
   window.clearTimeout(session.timer);
-  session.stream.getTracks().forEach((track) => track.stop());
+  stopTracks(session.stream);
   void session.audio.close().catch(() => undefined);
+}
+
+function createRecorder(stream: MediaStream): MediaRecorder {
+  const mimeType = MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type));
+  try {
+    return new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
+  } catch {
+    return new MediaRecorder(stream);
+  }
 }
 
 export function useVoiceRecorder({ language, onText }: { language: string; onText: (text: string) => void }) {
@@ -31,11 +48,21 @@ export function useVoiceRecorder({ language, onText }: { language: string; onTex
   const [state, setState] = useState<VoiceState>("idle");
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const sessionRef = useRef<Session | null>(null);
+  const startingRef = useRef(false);
+  // Bumped on unmount so a microphone permission that resolves afterwards stops its own stream.
+  const tokenRef = useRef(0);
 
   useEffect(() => {
-    const ref = sessionRef;
+    const session = sessionRef;
+    const token = tokenRef;
     return () => {
-      if (ref.current) teardown(ref.current);
+      token.current += 1;
+      const current = session.current;
+      session.current = null;
+      if (!current) return;
+      current.cancelled = true;
+      if (current.recorder.state !== "inactive") current.recorder.stop();
+      teardown(current);
     };
   }, []);
 
@@ -67,42 +94,64 @@ export function useVoiceRecorder({ language, onText }: { language: string; onTex
   }
 
   async function start() {
-    if (state !== "idle") return;
+    if (state !== "idle" || startingRef.current || sessionRef.current) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       toast.error(t("micUnsupported"));
       return;
     }
 
+    startingRef.current = true;
+    const token = tokenRef.current;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch {
-      toast.error(t("micDenied"));
+      if (token === tokenRef.current) toast.error(t("micDenied"));
+      return;
+    } finally {
+      startingRef.current = false;
+    }
+    if (token !== tokenRef.current) {
+      stopTracks(stream);
       return;
     }
 
-    const mimeType = MIME_CANDIDATES.find((type) => MediaRecorder.isTypeSupported(type));
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    const audio = new AudioContext();
-    const node = audio.createAnalyser();
-    node.fftSize = 512;
-    node.smoothingTimeConstant = 0.7;
-    audio.createMediaStreamSource(stream).connect(node);
+    let recorder: MediaRecorder;
+    let audio: AudioContext;
+    let node: AnalyserNode;
+    try {
+      recorder = createRecorder(stream);
+      audio = new AudioContext();
+      node = audio.createAnalyser();
+      node.fftSize = 512;
+      node.smoothingTimeConstant = 0.7;
+      audio.createMediaStreamSource(stream).connect(node);
+    } catch (error) {
+      console.error("Starting the voice recorder failed:", error);
+      stopTracks(stream);
+      toast.error(t("micUnsupported"));
+      return;
+    }
 
+    const session: Session = { recorder, stream, audio, timer: window.setTimeout(stop, MAX_RECORDING_MS), cancelled: false };
     const chunks: Blob[] = [];
+    let bytes = 0;
     recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data);
+      if (!event.data.size) return;
+      chunks.push(event.data);
+      bytes += event.data.size;
+      if (bytes >= MAX_AUDIO_BYTES && recorder.state === "recording") recorder.stop();
     };
     recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-      if (sessionRef.current) teardown(sessionRef.current);
-      sessionRef.current = null;
+      teardown(session);
+      if (sessionRef.current === session) sessionRef.current = null;
+      if (session.cancelled) return;
       setAnalyser(null);
-      void transcribe(blob);
+      void transcribe(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
     };
 
-    recorder.start(250);
-    sessionRef.current = { recorder, stream, audio, timer: window.setTimeout(stop, MAX_RECORDING_MS) };
+    recorder.start(CHUNK_MS);
+    sessionRef.current = session;
     setAnalyser(node);
     setState("recording");
     haptic();

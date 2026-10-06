@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import { getServerSession } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import { NextResponse } from "next/server";
+import { isDuplicateKey } from "./http";
 import { connectDB } from "./mongodb";
 import { User, type UserDoc } from "./models/User";
 
@@ -19,16 +20,26 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account }) {
       if (!user.email) return false;
       await connectDB();
-      const existing = await User.exists({ email: user.email });
-
-      if (!existing) {
-        await User.create({
-          name: user.name,
-          email: user.email,
-          image: user.image,
-          providerId: account?.providerAccountId,
-          credits: 100,
-        });
+      // One atomic upsert, so two tabs finishing first sign-in together can't both try to create the user.
+      const createIfMissing = () =>
+        User.findOneAndUpdate(
+          { email: user.email },
+          {
+            $setOnInsert: {
+              name: user.name,
+              email: user.email,
+              image: user.image,
+              providerId: account?.providerAccountId,
+              credits: 100,
+            },
+          },
+          { upsert: true, setDefaultsOnInsert: true }
+        );
+      try {
+        await createIfMissing();
+      } catch (error) {
+        // Concurrent upserts can still race on the unique email index; the other one created the user.
+        if (!isDuplicateKey(error)) throw error;
       }
       return true;
     },

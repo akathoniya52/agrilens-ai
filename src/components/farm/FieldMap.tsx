@@ -6,6 +6,7 @@ import { LngLatBounds, MapLibreMap, NavigationControl, Popup, type GeoJSONSource
 import type { DiagnosisPin, FieldDTO, LngLat } from "@/types/farm";
 import { closeRing } from "@/lib/geo";
 import DrawToolbar from "./DrawToolbar";
+import { distinctCorners } from "./ring";
 import { mapStyle, pinFeatures, PIN_COLOR, fieldFeatures } from "./map-style";
 
 export interface FieldMapProps {
@@ -21,6 +22,8 @@ export interface FieldMapProps {
 }
 
 const SNAP_PX = 14;
+/** Corners closer than this on screen are one corner (e.g. the two clicks of a double-click). */
+const DUPLICATE_PX = 6;
 
 type Handlers = Pick<FieldMapProps, "onSelectField" | "onDrawComplete" | "onDrawCancel"> & { drawing: boolean };
 
@@ -40,9 +43,16 @@ export default function FieldMap(props: FieldMapProps) {
   });
 
   function finish(ring: LngLat[]) {
-    if (ring.length < 3) return;
+    const map = mapRef.current;
+    const corners = map
+      ? distinctCorners(ring, (a, b) => map.project(a).dist(map.project(b)), DUPLICATE_PX)
+      : distinctCorners(ring, (a, b) => (a[0] === b[0] && a[1] === b[1] ? 0 : Infinity));
+    if (corners.length < 3) {
+      setVertices(corners);
+      return;
+    }
     setVertices([]);
-    handlersRef.current.onDrawComplete(ring);
+    handlersRef.current.onDrawComplete(corners);
   }
 
   function cancel() {
@@ -86,6 +96,8 @@ export default function FieldMap(props: FieldMapProps) {
           const first = map.project(ring[0]);
           if (first.dist(event.point) <= SNAP_PX) return finish(ring);
         }
+        const last = ring[ring.length - 1];
+        if (last && map.project(last).dist(event.point) <= DUPLICATE_PX) return;
         setVertices([...ring, [event.lngLat.lng, event.lngLat.lat]]);
         return;
       }

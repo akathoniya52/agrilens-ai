@@ -44,7 +44,12 @@ async function verifyOwnership(items: Input[], userId: Types.ObjectId) {
     fieldIds.length ? Field.find({ _id: { $in: fieldIds }, userId }).select("farmId").lean() : [],
   ]);
   if (farms !== farmIds.length || fields.length !== fieldIds.length) return null;
-  return new Map(fields.map((f) => [f._id.toString(), f.farmId]));
+  const fieldFarms = new Map(fields.map((f) => [f._id.toString(), f.farmId]));
+  // A field may only be linked together with its own farm.
+  const mismatched = items.some(
+    (i) => i.fieldId && i.farmId && fieldFarms.get(i.fieldId)?.toString() !== i.farmId
+  );
+  return mismatched ? null : fieldFarms;
 }
 
 export async function POST(req: NextRequest) {

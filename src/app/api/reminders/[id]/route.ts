@@ -27,6 +27,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (dueAt !== undefined) {
       reminder.dueAt = new Date(dueAt);
       reminder.notifiedAt = null;
+      reminder.claimedAt = null;
+      reminder.attempts = 0;
+      reminder.failedAt = null;
     }
     await reminder.save();
     return NextResponse.json(serializeReminder(reminder.toObject()));

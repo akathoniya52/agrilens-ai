@@ -8,6 +8,7 @@ import { cx } from "@/components/ui";
 import OnDeviceHint from "@/components/ondevice/OnDeviceHint";
 import { getLanguage } from "@/lib/languages";
 import AttachmentTray from "./AttachmentTray";
+import { mergeDraftText } from "./draft";
 import { PaperclipIcon, SendIcon, StopIcon } from "./icons";
 import { MAX_ATTACHMENTS, useAttachments } from "./useAttachments";
 import type { Draft, StreamStatus } from "./useChatStream";
@@ -24,6 +25,8 @@ export interface ComposerHandle {
 interface ComposerProps {
   ref?: Ref<ComposerHandle>;
   status: StreamStatus;
+  /** True while the open thread is loading or failed to load. */
+  disabled?: boolean;
   onSend: (draft: Draft) => Promise<boolean>;
   onStop: () => void;
 }
@@ -32,7 +35,7 @@ const MAX_TEXTAREA_PX = 200;
 const toolButton =
   "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-fg-subtle transition-colors hover:bg-surface-3 hover:text-fg disabled:pointer-events-none disabled:opacity-40";
 
-export default function Composer({ ref, status, onSend, onStop }: ComposerProps) {
+export default function Composer({ ref, status, disabled = false, onSend, onStop }: ComposerProps) {
   const t = useTranslations("chat");
   const language = getLanguage(useLocale()).code;
   const [text, setText] = useState("");
@@ -49,8 +52,13 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
   });
 
   const busy = status !== "idle";
-  const canSend = !busy && !attachments.uploading && (text.trim().length > 0 || attachments.ready.length > 0);
-  const full = attachments.items.length >= MAX_ATTACHMENTS;
+  const canSend =
+    !busy &&
+    !disabled &&
+    !attachments.uploading &&
+    !attachments.failed &&
+    (text.trim().length > 0 || attachments.ready.length > 0);
+  const full = disabled || attachments.items.length >= MAX_ATTACHMENTS;
 
   useImperativeHandle(ref, () => ({
     addFiles: attachments.add,
@@ -60,7 +68,7 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
       textareaRef.current?.focus();
     },
     restore: (draft) => {
-      setText(draft.content);
+      setText((prev) => mergeDraftText(draft.content, prev));
       attachments.restore(draft.attachments);
     },
   }));
@@ -79,13 +87,15 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
     attachments.clear();
     const sent = await onSend(draft);
     if (!sent) {
-      setText(draft.content);
+      setText((prev) => mergeDraftText(draft.content, prev));
       attachments.restore(draft.attachments);
     }
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.key !== "Enter" || event.shiftKey) return;
+    // Safari reports isComposing=false on the Enter that confirms an IME word; keyCode 229 catches it.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     event.preventDefault();
     void submit();
   }
@@ -104,7 +114,14 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
       }}
       className="chat-composer rounded-[1.75rem] border border-border bg-surface-2/75 shadow-raised backdrop-blur-xl transition-[border-color,box-shadow] duration-300 focus-within:border-accent/55 focus-within:shadow-glow"
     >
-      {attachments.items.length > 0 && <AttachmentTray items={attachments.items} onRemove={attachments.remove} />}
+      {attachments.items.length > 0 && (
+        <AttachmentTray items={attachments.items} onRemove={attachments.remove} onRetry={attachments.retry} />
+      )}
+      {attachments.failed && (
+        <p role="alert" className="mx-4 mt-2 text-xs font-medium text-danger">
+          {t("uploadFailedBlock")}
+        </p>
+      )}
       <OnDeviceHint src={attachments.items[0]?.preview} className="mx-3 mt-2" />
 
       <div className="relative px-4 pt-3">
@@ -134,6 +151,7 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
               animate={{ opacity: 1 }}
               rows={1}
               value={text}
+              disabled={disabled}
               onChange={(event) => setText(event.target.value)}
               onKeyDown={onKeyDown}
               onPaste={(event) => {
@@ -144,7 +162,7 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
               }}
               placeholder={voice.state === "transcribing" ? t("transcribing") : t("composerPlaceholder")}
               aria-label={t("composerPlaceholder")}
-              className="block max-h-[200px] min-h-11 w-full resize-none bg-transparent py-2 text-base leading-relaxed text-fg outline-none placeholder:text-fg-subtle focus-visible:outline-none"
+              className="block max-h-[200px] min-h-11 w-full resize-none bg-transparent py-2 text-base leading-relaxed text-fg outline-none placeholder:text-fg-subtle focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             />
           )}
         </AnimatePresence>
@@ -168,7 +186,7 @@ export default function Composer({ ref, status, onSend, onStop }: ComposerProps)
           type="button"
           className={cx(toolButton, voice.state === "recording" && "bg-danger/12 text-danger hover:bg-danger/20 hover:text-danger")}
           onClick={voice.state === "recording" ? voice.stop : voice.start}
-          disabled={voice.state === "transcribing"}
+          disabled={voice.state === "transcribing" || (disabled && voice.state === "idle")}
           aria-label={voice.state === "recording" ? t("stopRecording") : t("recordVoice")}
           title={voice.state === "recording" ? t("stopRecording") : t("recordVoice")}
           aria-pressed={voice.state === "recording"}

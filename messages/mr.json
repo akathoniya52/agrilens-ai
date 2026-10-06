@@ -246,7 +246,7 @@
     "notHelpful": "उपयुक्त नाही",
     "dropImage": "जोडण्यासाठी फोटो इथे सोडा",
     "removeAttachment": "फोटो काढा",
-    "imageTooLarge": "फोटो 5 MB किंवा त्याहून लहान असावा.",
+    "imageTooLarge": "फोटो 4 MB किंवा त्याहून लहान असावा.",
     "uploadFailed": "अपलोड अयशस्वी. कृपया पुन्हा प्रयत्न करा.",
     "error": "काहीतरी चुकले. कृपया पुन्हा प्रयत्न करा.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "स्रोत",
     "queuedSent": "{count, plural, one {# queued message sent} other {# queued messages sent}}",
     "queuedNoCredits": "Queued messages will be sent once you have credits again.",
-    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically."
+    "queuedRetry": "Couldn't send queued messages yet. We'll retry automatically.",
+    "busy": "या चॅटमध्ये आधीच एक उत्तर लिहिले जात आहे. कृपया ते पूर्ण होईपर्यंत थांबा.",
+    "loadOlder": "जुने संदेश लोड करा",
+    "loadOlderFailed": "जुने संदेश लोड होऊ शकले नाहीत.",
+    "chatNotFound": "हे संभाषण अस्तित्वात नाही किंवा हटवले गेले आहे.",
+    "noAnswerYet": "या प्रश्नाचे अजून उत्तर मिळालेले नाही.",
+    "regenerating": "नवीन उत्तर लिहिले जात आहे…",
+    "uploadFailedBlock": "काही फोटो अपलोड झाले नाहीत. पाठवण्यासाठी पुन्हा प्रयत्न करा किंवा ते काढा.",
+    "retryUpload": "पुन्हा अपलोड करा"
   },
   "farms": {
     "title": "माझी शेते",
@@ -570,7 +578,9 @@
       "chart": "NDVI over the last 90 days",
       "showMap": "Show NDVI map",
       "hideMap": "Hide NDVI map",
-      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)"
+      "mapAlt": "NDVI heatmap of the field (red = stressed, green = healthy)",
+      "mapDate": "{date} च्या पासचा नकाशा · ढगाळ भाग रिकामे ठेवले आहेत",
+      "noMap": "गेल्या 90 दिवसांत या शेताची स्पष्ट उपग्रह प्रतिमा मिळाली नाही."
     },
     "yield": {
       "title": "उत्पादन अंदाज",
@@ -616,7 +626,8 @@
     },
     "chart": "Price trend with 7-day forecast",
     "forecastNote": "Dashed line: linear-trend forecast, not financial advice.",
-    "buildingHistory": "Trend builds up as daily prices are collected."
+    "buildingHistory": "Trend builds up as daily prices are collected.",
+    "stale": "थेट भाव अपडेट करता आले नाहीत, त्यामुळे हे जतन केलेले भाव जुने असू शकतात."
   },
   "radar": {
     "title": "Outbreak radar",
@@ -652,7 +663,8 @@
     "failed": "Couldn't analyse the photo. Check your connection.",
     "continue": "चॅटमध्ये सुरू ठेवा",
     "noModel": "Live on-device detection isn't configured — capture a photo and AgriLens will analyse it online.",
-    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter."
+    "tip": "Fill the frame with the affected leaves in good daylight, then tap the shutter.",
+    "imageTooLarge": "हा फोटो अपलोड करण्यासाठी खूप मोठा आहे (कमाल 4 MB)."
   },
   "onDevice": {
     "label": "On-device guess",

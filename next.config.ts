@@ -5,9 +5,8 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 // Same resolution as configuredBlobHost() in src/lib/media.ts: pin the image optimizer to our own store.
 const blobStoreId = process.env.BLOB_READ_WRITE_TOKEN?.split("_")[3]?.toLowerCase();
-const blobHost =
-  process.env.BLOB_STORE_HOST?.trim() ||
-  (blobStoreId ? `${blobStoreId}.public.blob.vercel-storage.com` : "*.public.blob.vercel-storage.com");
+const pinnedBlobHost =
+  process.env.BLOB_STORE_HOST?.trim() || (blobStoreId ? `${blobStoreId}.public.blob.vercel-storage.com` : "");
 
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -26,6 +25,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   poweredByHeader: false,
+  env: { NEXT_PUBLIC_BLOB_HOST: pinnedBlobHost },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
@@ -38,8 +38,9 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: blobHost,
+        hostname: pinnedBlobHost || '*.public.blob.vercel-storage.com',
         pathname: '/uploads/**',
+        search: '',
       },
     ],
   },

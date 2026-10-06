@@ -35,7 +35,8 @@ export function getGenAI(): GoogleGenAI {
 
 export interface AgentToolkit {
   declarations: FunctionDeclaration[];
-  execute: (name: string, args: unknown) => Promise<Record<string, unknown>>;
+  /** Receives the answer's abort signal so Stop also cancels in-flight tools. */
+  execute: (name: string, args: unknown, signal?: AbortSignal) => Promise<Record<string, unknown>>;
   onCall?: (name: string) => void;
 }
 
@@ -43,6 +44,7 @@ export interface StreamAnswerOptions {
   contents: Content[];
   language?: string | null;
   extraContext?: ContextSection[];
+  timeZone?: string | null;
   signal?: AbortSignal;
   /** Enables Gemini function calling; the loop runs at most MAX_TOOL_ROUNDS tool rounds. */
   tools?: AgentToolkit;
@@ -53,12 +55,12 @@ export const MAX_TOOL_ROUNDS = 4;
 const visibleText = (parts: Part[]) =>
   parts.map((part) => (typeof part.text === "string" && !part.thought ? part.text : "")).join("");
 
-async function runToolCalls(calls: FunctionCall[], tools: AgentToolkit): Promise<Part[]> {
+async function runToolCalls(calls: FunctionCall[], tools: AgentToolkit, signal?: AbortSignal): Promise<Part[]> {
   return Promise.all(
     calls.map(async (call) => {
       const name = call.name ?? "";
       tools.onCall?.(name);
-      const response = await tools.execute(name, call.args ?? {});
+      const response = await tools.execute(name, call.args ?? {}, signal);
       return { functionResponse: { ...(call.id ? { id: call.id } : {}), name, response } };
     })
   );
@@ -68,10 +70,11 @@ export async function* streamAgriAnswer({
   contents,
   language,
   extraContext,
+  timeZone,
   signal,
   tools,
 }: StreamAnswerOptions): AsyncGenerator<string> {
-  const systemInstruction = buildSystemPrompt({ language, extraContext });
+  const systemInstruction = buildSystemPrompt({ language, extraContext, timeZone });
   let history = contents;
 
   for (let round = 0; ; round++) {
@@ -103,7 +106,8 @@ export async function* streamAgriAnswer({
     }
 
     if (!tools || !toolsEnabled || !calls.length || signal?.aborted) return;
-    const responses = await runToolCalls(calls, tools);
+    const responses = await runToolCalls(calls, tools, signal);
+    if (signal?.aborted) return;
     history = [...history, { role: "model", parts: modelParts }, { role: "user", parts: responses }];
   }
 }

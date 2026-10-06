@@ -9,6 +9,7 @@ import { serializeMe } from "@/lib/serialize";
 import { PHONE_CODE_TTL_MS, generatePhoneCode, hashPhoneCode } from "@/lib/phone-link";
 import { normalizePhone } from "@/lib/whatsapp";
 import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
+import { isValidTimeZone } from "@/lib/timezone";
 
 const UpdateMeSchema = z.object({
   language: z.string().refine(isLanguageCode, "Unsupported language").optional(),
@@ -20,6 +21,7 @@ const UpdateMeSchema = z.object({
       reminders: z.boolean().optional(),
     })
     .optional(),
+  timeZone: z.string().max(64).refine(isValidTimeZone, "Unsupported time zone").optional(),
   phone: z
     .string()
     .transform((value) => normalizePhone(value))
@@ -64,7 +66,8 @@ export async function GET() {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
-    return NextResponse.json(serializeMe(auth.user.toObject()));
+    const me = auth.user.toObject();
+    return NextResponse.json({ ...serializeMe(me), timeZone: me.timeZone ?? null });
   } catch (error) {
     return serverError("GET /api/me", error);
   }
@@ -100,7 +103,11 @@ export async function PATCH(req: NextRequest) {
     ).lean();
     if (!updated) return serverError("PATCH /api/me", new Error("User disappeared"));
 
-    return NextResponse.json({ ...serializeMe(updated), ...(code && { phoneCode: code }) });
+    return NextResponse.json({
+      ...serializeMe(updated),
+      timeZone: updated.timeZone ?? null,
+      ...(code && { phoneCode: code }),
+    });
   } catch (error) {
     return serverError("PATCH /api/me", error);
   }

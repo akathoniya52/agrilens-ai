@@ -10,21 +10,28 @@ import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const TOO_LARGE = "Audio must be 4MB or smaller";
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await requireUser();
     if ("error" in auth) return auth.error;
-    if (exceedsContentLength(req, MAX_AUDIO_BYTES + 64 * 1024)) return jsonError("Audio must be 10MB or smaller", 413);
+    if (exceedsContentLength(req, MAX_AUDIO_BYTES + 64 * 1024)) return jsonError(TOO_LARGE, 413);
     const limited = await rateLimit("transcribe", auth.user._id.toString(), RATE_LIMITS.transcribe);
     if (limited) return limited;
 
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return jsonError("Invalid form data", 400);
+    }
     const audio = form.get("audio");
     if (!(audio instanceof File)) return jsonError("Missing audio", 400);
 
     const mimeType = baseMimeType(audio.type);
     if (!mimeType.startsWith("audio/")) return jsonError("Unsupported audio type", 415);
-    if (audio.size > MAX_AUDIO_BYTES) return jsonError("Audio must be 10MB or smaller", 413);
+    if (audio.size > MAX_AUDIO_BYTES) return jsonError(TOO_LARGE, 413);
 
     const requested = form.get("language");
     const language = isLanguageCode(requested) ? requested : auth.user.language;

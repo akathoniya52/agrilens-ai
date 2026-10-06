@@ -25,11 +25,14 @@ export interface FlushResult {
 export type OutboxOutcome = "delivered" | "drop" | "retry";
 
 /**
- * 2xx and 409 (already received via clientId) count as delivered; only 400/404 are permanently
- * undeliverable. Everything else (401, 402, 408, 429, 5xx, …) keeps the item and stops the flush.
+ * 2xx (a streamed answer, or `{status: "answered"}` for a resent clientId) and 409 `unanswered` (saved,
+ * the user can tap Regenerate) count as delivered, as does any other 409. 409 `busy` (another answer is
+ * being generated in that chat) is retried. Only 400/404 are permanently undeliverable. Everything else
+ * (401, 402, 408, 429, 5xx, …) keeps the item and stops the flush.
  */
-export function classifyOutboxStatus(status: number): OutboxOutcome {
-  if ((status >= 200 && status < 300) || status === 409) return "delivered";
+export function classifyOutboxStatus(status: number, code?: string | null): OutboxOutcome {
+  if (status === 409) return code === "busy" ? "retry" : "delivered";
+  if (status >= 200 && status < 300) return "delivered";
   if (status === 400 || status === 404) return "drop";
   return "retry";
 }
@@ -93,6 +96,17 @@ export async function removeOutbox(id: number): Promise<void> {
   await withStore("readwrite", (store) => store.delete(id));
 }
 
+async function errorCode(res: Response): Promise<string | null> {
+  try {
+    const body: unknown = await res.json();
+    return typeof body === "object" && body !== null && "code" in body && typeof body.code === "string" ? body.code : null;
+  } catch {
+    return null;
+  }
+}
+
+const isNdjson = (res: Response) => res.headers.get("content-type")?.includes("application/x-ndjson") ?? false;
+
 async function drain(res: Response) {
   const reader = res.body?.getReader();
   if (!reader) return;
@@ -117,13 +131,15 @@ async function doFlush(): Promise<FlushResult> {
     } catch {
       break;
     }
-    const outcome = classifyOutboxStatus(res.status);
+    const outcome = classifyOutboxStatus(res.status, res.status === 409 ? await errorCode(res) : null);
     if (outcome === "retry") {
       result.blockedStatus = res.status;
       break;
     }
     if (outcome === "delivered") {
-      if (res.ok) await drain(res).catch((error: unknown) => console.error("Outbox stream drain failed:", error));
+      if (res.ok && isNdjson(res)) {
+        await drain(res).catch((error: unknown) => console.error("Outbox stream drain failed:", error));
+      }
       result.sent += 1;
       if (!result.chatIds.includes(item.chatId)) result.chatIds.push(item.chatId);
     } else {

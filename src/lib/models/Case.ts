@@ -65,5 +65,15 @@ const CaseSchema = new Schema<ICase>(
 CaseSchema.index({ userId: 1, createdAt: -1 });
 CaseSchema.index({ status: 1, createdAt: -1 });
 CaseSchema.index({ messageId: 1 });
+// At most one unresolved case per message, so a double-click or retry can't open two. ($in in a
+// partial filter needs MongoDB 6.0+.)
+CaseSchema.index(
+  { messageId: 1 },
+  {
+    name: "messageId_active_unique",
+    unique: true,
+    partialFilterExpression: { status: { $in: ["open", "assigned"] } },
+  }
+);
 
 export const Case = (models.Case as Model<ICase>) || model<ICase>("Case", CaseSchema);

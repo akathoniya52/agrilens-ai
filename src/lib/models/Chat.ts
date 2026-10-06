@@ -6,6 +6,8 @@ export interface IChat {
   lastMessageAt: Date;
   summary: string;
   summarizedUpTo: Date | null;
+  /** Set while an answer is being generated (see acquireGenerationLock); stale after 90 s. */
+  generatingAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +23,7 @@ const ChatSchema = new Schema<IChat>(
     lastMessageAt: { type: Date, default: Date.now },
     summary: { type: String, default: "" },
     summarizedUpTo: { type: Date, default: null },
+    generatingAt: { type: Date, default: undefined },
   },
   { timestamps: true }
 );

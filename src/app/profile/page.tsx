@@ -2,15 +2,17 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { toast } from "sonner";
 import { useFormatter, useTranslations } from "next-intl";
 import { getJson, type Me, type Stats } from "@/components/account";
+import LoadError from "@/components/LoadError";
+import { useRetryableLoad } from "@/components/useRetryableLoad";
 import { AnimatedCounter, FadeIn, GlowCard, Panel, Skeleton, Stagger, StaggerItem } from "@/components/ui";
 import { ArrowRightIcon, CameraIcon, ChartIcon, ChatIcon, GearIcon, SproutMark, UserIcon } from "@/components/icons";
 import { getLanguage } from "@/lib/languages";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 const USAGE = [
   { key: "chats", field: "totalChats", Icon: ChatIcon },
@@ -25,26 +27,24 @@ export default function ProfilePage() {
   const format = useFormatter();
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { data, error, retry } = useRetryableLoad(
+    () => Promise.all([getJson<Me>("/api/me"), getJson<Stats>("/api/stats")]),
+    { enabled: status === "authenticated" }
+  );
+  const [me, stats] = data ?? [null, null];
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
-    if (status !== "authenticated") return;
-    let cancelled = false;
-    Promise.all([getJson<Me>("/api/me"), getJson<Stats>("/api/stats")])
-      .then(([meRes, statsRes]) => {
-        if (cancelled) return;
-        setMe(meRes);
-        setStats(statsRes);
-      })
-      .catch(() => {
-        if (!cancelled) toast.error(t("loadFailed"));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [status, router, t]);
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
+  }, [status, router]);
+
+  if (status === "authenticated" && error) {
+    return (
+      <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
+        <h1 className="mb-8 font-display text-4xl font-bold text-fg sm:text-5xl">{t("title")}</h1>
+        <LoadError message={t("loadFailed")} onRetry={retry} />
+      </main>
+    );
+  }
 
   if (status !== "authenticated" || !session) {
     return (

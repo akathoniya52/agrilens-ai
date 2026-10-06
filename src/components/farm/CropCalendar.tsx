@@ -13,7 +13,7 @@ const STAGE_TONES = ["bg-leaf-900", "bg-leaf-800", "bg-leaf-700", "bg-leaf-600",
 
 interface CropCalendarProps {
   field: FieldDTO;
-  onRemind: (inputs: ReminderInput[]) => Promise<void>;
+  onRemind: (inputs: ReminderInput[]) => Promise<boolean>;
 }
 
 export default function CropCalendar({ field, onRemind }: CropCalendarProps) {

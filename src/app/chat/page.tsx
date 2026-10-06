@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { signInUrl } from "@/lib/callback-url";
 import ChatLayout from "@/components/ChatLayout";
 import { MessagesSkeleton } from "@/components/chat/ChatSkeleton";
 
@@ -31,7 +32,7 @@ function ChatPageInner() {
   const initialChatId = requested && OBJECT_ID.test(requested) ? requested : null;
 
   useEffect(() => {
-    if (status === "unauthenticated") router.replace("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrl(window.location.pathname + window.location.search));
   }, [status, router]);
 
   if (status !== "authenticated") return <Skeleton />;

@@ -6,12 +6,14 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { CREDITS_EVENT } from "@/components/account";
-import { createChat, postMessage, uploadImage } from "@/components/chat/chat-api";
+import { createChat, deleteChat, postMessage, uploadImage } from "@/components/chat/chat-api";
+import { MAX_UPLOAD_BYTES } from "@/components/chat/useAttachments";
 import DiagnosisCard from "@/components/chat/DiagnosisCard";
 import Markdown from "@/components/chat/Markdown";
 import { CameraIcon, WifiOffIcon } from "@/components/icons";
 import { SproutLoader, cx } from "@/components/ui";
 import { haptic } from "@/lib/haptics";
+import { compressImage } from "@/lib/image-compress";
 import { onDeviceEnabled, type OnDevicePrediction } from "@/lib/ondevice";
 import type { OnDeviceClassifier } from "@/lib/ondevice/classifier";
 import { readEventStream } from "@/lib/stream";
@@ -82,12 +84,17 @@ export default function ScanCamera() {
         }
         stream = media;
         const video = videoRef.current;
-        if (!video) return;
+        if (!video) throw new Error("Video element missing");
         video.srcObject = media;
         await video.play();
-        setCamera("live");
+        if (!cancelled) setCamera("live");
       })
-      .catch(() => !cancelled && setCamera("denied"));
+      .catch(() => {
+        // Covers a failed play() too: release the camera instead of leaving it on behind an error screen.
+        stream?.getTracks().forEach((track) => track.stop());
+        stream = null;
+        if (!cancelled) setCamera("denied");
+      });
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((track) => track.stop());
@@ -157,16 +164,36 @@ export default function ScanCamera() {
     const controller = new AbortController();
     abortRef.current = controller;
     setAnalysis({ phase: "uploading", text: "", diagnosis: null, chatId: null, image: null });
+    let chatId: string | null = null;
+    let delivered = false;
     try {
-      const uploaded = await uploadImage(shot.blob, "scan.jpg", controller.signal);
-      const image: Attachment = { ...uploaded, width: shot.width, height: shot.height };
+      const compressed = await compressImage(shot.blob).catch(() => null);
+      const blob = compressed?.blob ?? shot.blob;
+      if (blob.size > MAX_UPLOAD_BYTES) {
+        toast.error(t("imageTooLarge"));
+        setAnalysis(null);
+        return;
+      }
+      const name = blob.type === "image/webp" ? "scan.webp" : "scan.jpg";
+      const uploaded = await uploadImage(blob, name, controller.signal);
+      const image: Attachment = {
+        ...uploaded,
+        width: uploaded.width ?? compressed?.width ?? shot.width,
+        height: uploaded.height ?? compressed?.height ?? shot.height,
+      };
+      // Create the chat only now, right before the message is sent, and only if the user is still here.
+      if (controller.signal.aborted) return;
       const chat = await createChat();
+      chatId = chat._id;
+      if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
       setAnalysis((a) => a && { ...a, phase: "thinking", chatId: chat._id, image });
       const note = shotPrediction ? `On-device model guess: ${shotPrediction.label} (${Math.round(shotPrediction.confidence * 100)}%).` : "";
       const res = await postMessage(chat._id, { content: note, attachments: [image] }, controller.signal);
       let text = "";
       await readEventStream(res, (event) => {
-        if (event.type === "delta") {
+        if (event.type === "meta") {
+          delivered = true;
+        } else if (event.type === "delta") {
           text += event.text;
           setAnalysis((a) => a && { ...a, phase: "streaming", text });
         } else if (event.type === "diagnosis") {
@@ -183,6 +210,11 @@ export default function ScanCamera() {
       if (!controller.signal.aborted) {
         toast.error(t("failed"));
         setAnalysis((a) => a && { ...a, phase: "error" });
+      }
+    } finally {
+      // Retake or a failure before the question was saved: don't leave an empty chat behind (#47).
+      if (chatId && !delivered) {
+        void deleteChat(chatId).catch((error: unknown) => console.warn("Removing the empty scan chat failed:", error));
       }
     }
   }

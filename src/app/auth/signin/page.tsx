@@ -1,11 +1,28 @@
 "use client";
 
 import Image from "next/image";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useTranslations } from "next-intl";
 import { FadeIn } from "@/components/ui";
+import { DEFAULT_CALLBACK_URL, safeCallbackUrl } from "@/lib/callback-url";
 
 export default function SignInPage() {
+  // useSearchParams needs a Suspense boundary; the fallback renders the same card with the default target.
+  return (
+    <Suspense fallback={<SignInCard callbackUrl={DEFAULT_CALLBACK_URL} />}>
+      <SignInWithCallback />
+    </Suspense>
+  );
+}
+
+function SignInWithCallback() {
+  const searchParams = useSearchParams();
+  return <SignInCard callbackUrl={safeCallbackUrl(searchParams.get("callbackUrl"))} />;
+}
+
+function SignInCard({ callbackUrl }: { callbackUrl: string }) {
   const t = useTranslations("auth");
 
   return (
@@ -22,7 +39,7 @@ export default function SignInPage() {
         <p className="mt-3 leading-relaxed text-fg-muted">{t("subtitle")}</p>
         <button
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/chat" })}
+          onClick={() => signIn("google", { callbackUrl })}
           className="mt-8 flex min-h-13 w-full items-center justify-center gap-3 rounded-2xl bg-accent px-5 font-semibold text-accent-fg shadow-glow transition hover:brightness-110 active:scale-[0.99]"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden>

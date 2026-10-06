@@ -20,6 +20,8 @@ export interface Me {
   /** Number awaiting WhatsApp verification, while its code is still valid. */
   pendingPhone?: string | null;
   pendingPhoneExpiresAt?: string | null;
+  /** IANA zone last reported by a browser; missing until the first sync. */
+  timeZone?: string | null;
   /** Only in the PATCH response that started verification; never stored in plain text. */
   phoneCode?: string;
   createdAt: string;
@@ -43,6 +45,7 @@ export interface MePatch {
   activeFarmId?: string | null;
   notificationPrefs?: Partial<NotificationPrefs>;
   phone?: string | null;
+  timeZone?: string;
 }
 
 /** Window event carrying the new credit balance as `detail: number`. */

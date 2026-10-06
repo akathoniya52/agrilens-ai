@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
@@ -12,9 +12,13 @@ import WhatsAppLink from "@/components/settings/WhatsAppLink";
 import { useTheme } from "@/components/ThemeProvider";
 import type { Theme } from "@/components/theme";
 import { getJson, patchMe, type Me, type NotificationPrefs } from "@/components/account";
+import LoadError from "@/components/LoadError";
+import { useRetryableLoad } from "@/components/useRetryableLoad";
 import { FadeIn, Panel, PanelRow, Skeleton, Switch, cx } from "@/components/ui";
 import { BellIcon, CheckIcon, DownloadIcon, GlobeIcon, LogoutIcon, PaletteIcon, ShieldIcon, UserIcon } from "@/components/icons";
 import { LANGUAGES, LOCALE_COOKIE, type LanguageCode } from "@/lib/languages";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
+import { signOutCleanly } from "@/lib/client/sign-out";
 
 const DEFAULT_PREFS: NotificationPrefs = { weatherAlerts: true, reminders: true };
 
@@ -31,24 +35,22 @@ export default function SettingsPage() {
   const router = useRouter();
   const locale = useLocale();
   const { theme, setTheme } = useTheme();
-  const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS);
+  const [savedPrefs, setSavedPrefs] = useState<NotificationPrefs | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pendingLocale, setPendingLocale] = useState<LanguageCode | null>(null);
   const [isRefreshing, startTransition] = useTransition();
 
+  const { data: me, error: meError, retry: retryMe } = useRetryableLoad(() => getJson<Me>("/api/me"), {
+    enabled: status === "authenticated",
+  });
+  // Switches stay disabled until the account's real values arrive, so they never show a guessed "on".
+  const prefsLoaded = me !== null;
+  const prefs = savedPrefs ?? { ...DEFAULT_PREFS, ...me?.notificationPrefs };
+
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
-    if (status !== "authenticated") return;
-    let cancelled = false;
-    getJson<Me>("/api/me")
-      .then((me) => {
-        if (!cancelled && me.notificationPrefs) setPrefs({ ...DEFAULT_PREFS, ...me.notificationPrefs });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
   }, [status, router]);
 
   function changeTheme(next: Theme) {
@@ -61,24 +63,27 @@ export default function SettingsPage() {
     if (code === locale) return;
     setPendingLocale(code);
     document.cookie = `${LOCALE_COOKIE}=${code}; path=/; max-age=31536000; samesite=lax`;
+    let saved = true;
     try {
       await patchMe({ language: code });
-    } catch {
+    } catch (error) {
       // The cookie already drives the UI; the account copy can sync next time.
-      toast.error(t("saveFailed"));
+      console.warn("[settings] could not save language", error instanceof Error ? error.message : error);
+      saved = false;
     }
     startTransition(() => router.refresh());
-    toast.success(t("language.changed"));
+    if (saved) toast.success(t("language.changed"));
+    else toast.error(t("saveFailed"));
   }
 
   async function togglePref(key: keyof NotificationPrefs, value: boolean) {
     const previous = prefs;
-    setPrefs({ ...prefs, [key]: value });
+    setSavedPrefs({ ...prefs, [key]: value });
     try {
       await patchMe({ notificationPrefs: { [key]: value } });
       toast.success(t("saved"));
     } catch {
-      setPrefs(previous);
+      setSavedPrefs(previous);
       toast.error(t("saveFailed"));
     }
   }
@@ -95,8 +100,11 @@ export default function SettingsPage() {
       const link = document.createElement("a");
       link.href = url;
       link.download = `agrilens-data-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      link.remove();
+      // Older Safari/Firefox start the download asynchronously; revoking right away cancels it.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast.success(t("data.exported"));
     } catch {
       toast.error(t("data.exportFailed"));
@@ -214,11 +222,13 @@ export default function SettingsPage() {
         <FadeIn delay={0.15}>
           <Panel title={t("notifications.title")} icon={<BellIcon width={18} height={18} />}>
             <div className="space-y-3">
+              {meError && !prefsLoaded && <LoadError onRetry={retryMe} className="py-6 shadow-none" />}
               {(["weatherAlerts", "reminders"] as const).map((key) => (
                 <PanelRow key={key} id={key} title={t(`notifications.${key}`)} hint={t(`notifications.${key}Hint`)}>
                   <Switch
                     checked={prefs[key]}
                     onChange={(value) => togglePref(key, value)}
+                    disabled={!prefsLoaded}
                     labelledBy={`${key}-label`}
                     describedBy={`${key}-hint`}
                     className="self-end sm:self-auto"
@@ -255,8 +265,12 @@ export default function SettingsPage() {
               <PanelRow title={t("account.signOut")} hint={t("account.signOutHint")}>
                 <button
                   type="button"
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-3"
+                  onClick={() => {
+                    setSigningOut(true);
+                    void signOutCleanly();
+                  }}
+                  disabled={signingOut}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-border-strong px-4 text-sm font-semibold text-fg transition-colors hover:bg-surface-3 disabled:cursor-wait disabled:opacity-60"
                 >
                   {t("account.signOut")}
                 </button>

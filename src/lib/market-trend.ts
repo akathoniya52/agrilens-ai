@@ -1,4 +1,4 @@
-import type { PricePoint, PriceTrend } from "@/types/insights";
+import type { MarketResult, PricePoint, PriceTrend } from "@/types/insights";
 
 export interface MandiRecord {
   state: string;
@@ -59,6 +59,17 @@ export function parseMandiRecords(body: unknown): MandiRecord[] {
     });
   }
   return out;
+}
+
+/**
+ * Puts rows read newest-first under a row cap back into date order. When the cap was hit, the oldest day was
+ * probably cut short, so it's dropped rather than averaged over a partial set of markets.
+ */
+export function recentHistory<T extends { date: string }>(newestFirst: readonly T[], limit: number): T[] {
+  const rows = [...newestFirst].reverse();
+  if (newestFirst.length < limit) return rows;
+  const complete = rows.filter((r) => r.date !== rows[0].date);
+  return complete.length ? complete : rows;
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
@@ -122,4 +133,43 @@ export function computeTrend(series: PricePoint[], { window = 7, horizon = 7 } =
   const threshold = movingAverage * 0.002;
   const direction = fit.slope > threshold ? "up" : fit.slope < -threshold ? "down" : "flat";
   return { direction, slopePerDay: round(fit.slope), changePct, movingAverage, forecast };
+}
+
+/** `stale`: the live data.gov.in fetch failed, so only stored history is shown. */
+export type MarketResponse = MarketResult & { stale: boolean };
+
+const recordKey = (r: MandiRecord) => [r.state, r.district, r.market, r.variety, r.date].join("|").toLowerCase();
+
+/** Merges stored history with the live fetch (live wins); `live` is null when the fetch failed. */
+export function summarizeMarket(
+  commodity: string,
+  scope: { state?: string | null; district?: string | null },
+  stored: MandiRecord[],
+  live: MandiRecord[] | null
+): MarketResponse {
+  const stale = live === null;
+  const merged = new Map<string, MandiRecord>();
+  for (const r of [...stored, ...(live ?? [])]) merged.set(recordKey(r), r);
+  const records = [...merged.values()];
+  if (!records.length) return { status: "no_data", commodity, stale };
+
+  const series = dailySeries(records);
+  const latest = series[series.length - 1] ?? null;
+  const markets = records
+    .filter((r) => r.date === latest?.date)
+    .sort((a, b) => b.modal - a.modal)
+    .slice(0, 8)
+    .map((r) => ({ market: r.market, district: r.district, modal: r.modal, date: r.date }));
+
+  return {
+    status: "ok",
+    commodity,
+    state: scope.state ?? null,
+    district: scope.district ?? null,
+    latest,
+    series,
+    trend: computeTrend(series),
+    markets,
+    stale,
+  };
 }

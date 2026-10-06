@@ -1,3 +1,4 @@
+import { dateKeyInZone } from "@/lib/timezone";
 import type { ReminderKind } from "@/types/farm";
 
 export const CROP_KEYS = ["wheat", "rice", "maize", "cotton", "tomato", "potato", "soybean", "sugarcane", "generic"] as const;
@@ -217,11 +218,22 @@ export interface CropStageInfo {
   progress: number;
 }
 
-export function cropStage(crop: string, sowingDate: Date | string, now: Date = new Date()): CropStageInfo {
+/** Whole calendar days from `from` to `to` as seen in `timeZone`, so the count ticks over at local midnight. */
+export function calendarDaysBetween(from: Date, to: Date, timeZone: string): number {
+  return Math.round((Date.parse(dateKeyInZone(to, timeZone)) - Date.parse(dateKeyInZone(from, timeZone))) / DAY_MS);
+}
+
+/** `timeZone` defaults to the runtime's own (the browser's on the client); servers should pass the user's. */
+export function cropStage(
+  crop: string,
+  sowingDate: Date | string,
+  now: Date = new Date(),
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
+): CropStageInfo {
   const cropKey = resolveCropKey(crop);
   const { stages } = TEMPLATES[cropKey];
   const total = stages[stages.length - 1].end;
-  const das = Math.floor((now.getTime() - new Date(sowingDate).getTime()) / DAY_MS);
+  const das = calendarDaysBetween(new Date(sowingDate), now, timeZone);
   if (das < 0) return { cropKey, das, stage: null, status: "planned", progress: 0 };
   if (das >= total) return { cropKey, das, stage: null, status: "harvested", progress: 1 };
   const stage = stages.find((s) => das >= s.start && das < s.end) ?? null;

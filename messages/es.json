@@ -246,7 +246,7 @@
     "notHelpful": "No útil",
     "dropImage": "Suelta una imagen para adjuntarla",
     "removeAttachment": "Quitar imagen",
-    "imageTooLarge": "Las imágenes deben pesar 5 MB o menos.",
+    "imageTooLarge": "Las imágenes deben pesar 4 MB o menos.",
     "uploadFailed": "La subida falló. Inténtalo de nuevo.",
     "error": "Algo salió mal. Inténtalo de nuevo.",
     "suggested": {
@@ -331,7 +331,15 @@
     "sources": "Fuentes",
     "queuedSent": "{count, plural, one {# mensaje en cola enviado} other {# mensajes en cola enviados}}",
     "queuedNoCredits": "Los mensajes en cola se enviarán cuando vuelvas a tener créditos.",
-    "queuedRetry": "Aún no se pudieron enviar los mensajes en cola. Lo reintentaremos automáticamente."
+    "queuedRetry": "Aún no se pudieron enviar los mensajes en cola. Lo reintentaremos automáticamente.",
+    "busy": "Ya se está escribiendo una respuesta en este chat. Espera a que termine.",
+    "loadOlder": "Cargar mensajes anteriores",
+    "loadOlderFailed": "No se pudieron cargar los mensajes anteriores.",
+    "chatNotFound": "Esta conversación no existe o se eliminó.",
+    "noAnswerYet": "Esta pregunta aún no tiene respuesta.",
+    "regenerating": "Escribiendo una nueva respuesta…",
+    "uploadFailedBlock": "Algunas imágenes no se subieron. Reinténtalo o quítalas para enviar.",
+    "retryUpload": "Reintentar subida"
   },
   "farms": {
     "title": "Mis fincas",
@@ -570,7 +578,9 @@
       "chart": "NDVI de los últimos 90 días",
       "showMap": "Mostrar mapa NDVI",
       "hideMap": "Ocultar mapa NDVI",
-      "mapAlt": "Mapa de calor NDVI de la parcela (rojo = estrés, verde = sano)"
+      "mapAlt": "Mapa de calor NDVI de la parcela (rojo = estrés, verde = sano)",
+      "mapDate": "Mapa de la pasada del {date} · las zonas con nubes quedan en blanco",
+      "noMap": "No hay ninguna imagen satelital despejada de esta parcela en los últimos 90 días."
     },
     "yield": {
       "title": "Estimación de rendimiento",
@@ -616,7 +626,8 @@
     },
     "chart": "Tendencia de precios con pronóstico a 7 días",
     "forecastNote": "Línea discontinua: pronóstico de tendencia lineal, no es asesoramiento financiero.",
-    "buildingHistory": "La tendencia se construye a medida que se recopilan los precios diarios."
+    "buildingHistory": "La tendencia se construye a medida que se recopilan los precios diarios.",
+    "stale": "No se pudieron actualizar los precios en vivo; estos precios guardados pueden estar desactualizados."
   },
   "radar": {
     "title": "Radar de brotes",
@@ -652,7 +663,8 @@
     "failed": "No se pudo analizar la foto. Revisa tu conexión.",
     "continue": "Continuar en el chat",
     "noModel": "La detección en el dispositivo no está configurada: captura una foto y AgriLens la analizará en línea.",
-    "tip": "Llena el encuadre con las hojas afectadas con buena luz natural y luego pulsa el obturador."
+    "tip": "Llena el encuadre con las hojas afectadas con buena luz natural y luego pulsa el obturador.",
+    "imageTooLarge": "Esta foto es demasiado grande para subirla (máx. 4 MB)."
   },
   "onDevice": {
     "label": "Estimación en el dispositivo",

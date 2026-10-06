@@ -1,4 +1,5 @@
 import { getLanguage } from "@/lib/languages";
+import { dateKeyInZone, resolveTimeZone, zoneOffsetMinutes } from "@/lib/timezone";
 
 export const AGRICULTURE_SYSTEM_PROMPT = `You are AgriLens AI, a helpful, domain-focused assistant that specializes in agriculture.
 
@@ -104,6 +105,9 @@ export interface SystemPromptOptions {
   language?: string | null;
   /** Extra grounding (chat summary now; farm/field/weather in Phase 3). Empty sections are skipped. */
   extraContext?: ContextSection[];
+  /** IANA zone of the user; relative dates ("tomorrow 7am") are resolved in it. */
+  timeZone?: string | null;
+  now?: Date;
 }
 
 export function languageInstruction(language?: string | null): string {
@@ -111,7 +115,26 @@ export function languageInstruction(language?: string | null): string {
   return `Respond in ${label} (${nativeLabel}).`;
 }
 
-export function buildSystemPrompt({ language, extraContext = [] }: SystemPromptOptions = {}): string {
+function formatOffset(minutes: number): string {
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+}
+
+/** Current local date, weekday, time and UTC offset of the user, for scheduling reminders correctly. */
+export function currentTimeInstruction(now: Date, timeZone?: string | null): string {
+  const zone = resolveTimeZone(timeZone);
+  const offset = formatOffset(zoneOffsetMinutes(now, zone));
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "long" }).format(now);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+  return [
+    `- Now for the user: ${weekday} ${dateKeyInZone(now, zone)} ${time} (time zone ${zone}, UTC${offset}).`,
+    "- Resolve relative dates and times (today, tomorrow, next Monday, 7am) in this time zone.",
+    `- Tool date-times must be ISO 8601 with this UTC offset, e.g. ${dateKeyInZone(now, zone)}T07:00:00${offset}.`,
+  ].join("\n");
+}
+
+export function buildSystemPrompt({ language, extraContext = [], timeZone, now = new Date() }: SystemPromptOptions = {}): string {
   const sections = extraContext
     .filter((section) => section.content.trim())
     .map((section) => `### ${section.label}\n${section.content.trim().replaceAll("</context>", "")}`);
@@ -125,6 +148,7 @@ export function buildSystemPrompt({ language, extraContext = [] }: SystemPromptO
         `<context>\n${sections.join("\n\n")}\n</context>`
     );
   }
+  parts.push(`CURRENT DATE AND TIME\n${currentTimeInstruction(now, timeZone)}`);
   parts.push(`LANGUAGE\n- ${languageInstruction(language)}`);
   return parts.join("\n\n");
 }

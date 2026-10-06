@@ -59,12 +59,30 @@ export function pushEnabled(): boolean {
   return configured;
 }
 
-/** Sends to every subscription of the user; prunes expired ones. Returns the number delivered. */
-export async function sendPushToUser(userId: Types.ObjectId | string, payload: PushPayload): Promise<number> {
-  if (!pushEnabled()) return 0;
+/** Per-request limit, so one slow push service can't stall a whole cron run. */
+export const PUSH_TIMEOUT_MS = 8000;
+
+export interface PushResult {
+  delivered: number;
+  /** Sends that failed for a reason worth retrying (not expired subscriptions). */
+  failed: number;
+}
+
+/** Rejects if `promise` hasn't settled within `ms`; the timer is always cleared. */
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Sends to every subscription of the user; prunes expired ones. */
+export async function sendPushToUser(userId: Types.ObjectId | string, payload: PushPayload): Promise<PushResult> {
+  const result: PushResult = { delivered: 0, failed: 0 };
+  if (!pushEnabled()) return result;
   const subs = await PushSubscriptionModel.find({ userId }).lean();
   const body = JSON.stringify(payload);
-  let delivered = 0;
 
   await Promise.all(
     subs.map(async (sub) => {
@@ -73,16 +91,49 @@ export async function sendPushToUser(userId: Types.ObjectId | string, payload: P
         return;
       }
       try {
-        await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, body, { TTL: 60 * 60 * 12 });
-        delivered += 1;
+        // web-push's `timeout` is a socket idle timeout; the race bounds the whole request.
+        await withTimeout(
+          webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, body, {
+            TTL: 60 * 60 * 12,
+            timeout: PUSH_TIMEOUT_MS,
+          }),
+          PUSH_TIMEOUT_MS
+        );
+        result.delivered += 1;
       } catch (error) {
         if (error instanceof WebPushError && (error.statusCode === 404 || error.statusCode === 410)) {
-          await PushSubscriptionModel.deleteOne({ _id: sub._id });
+          await PushSubscriptionModel.deleteOne({ _id: sub._id, endpoint: sub.endpoint });
         } else {
+          result.failed += 1;
           console.error("Web push failed:", error);
         }
       }
     })
   );
-  return delivered;
+  return result;
+}
+
+export const REMINDER_MAX_ATTEMPTS = 3;
+/** A claim older than this belongs to a run that died mid-send and may be taken over. */
+export const REMINDER_CLAIM_LEASE_MS = 5 * 60 * 1000;
+
+/** Reminders a cron run may claim at `now`: unsent, not given up on, and not leased by a live run. */
+export function claimableReminderFilter(now: Date) {
+  return {
+    done: false,
+    notifiedAt: null,
+    attempts: { $not: { $gte: REMINDER_MAX_ATTEMPTS } },
+    $or: [{ claimedAt: null }, { claimedAt: { $lte: new Date(now.getTime() - REMINDER_CLAIM_LEASE_MS) } }],
+  };
+}
+
+export type ReminderOutcome = "sent" | "retry" | "failed";
+
+/**
+ * What to record after a send. Any delivery (or no live subscription) counts as sent, so a device
+ * that already got it isn't notified again; otherwise retry until the attempts run out.
+ */
+export function reminderOutcome(result: PushResult, attempts: number): ReminderOutcome {
+  if (result.delivered > 0 || result.failed === 0) return "sent";
+  return attempts >= REMINDER_MAX_ATTEMPTS ? "failed" : "retry";
 }

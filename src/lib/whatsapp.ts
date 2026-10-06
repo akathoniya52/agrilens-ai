@@ -1,7 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { readCapped } from "@/lib/media";
 
 const GRAPH_URL = "https://graph.facebook.com";
 export const WHATSAPP_MAX_TEXT = 4096;
+export const WHATSAPP_TIMEOUT_MS = 10_000;
+
+/** Every Graph API call gets WHATSAPP_TIMEOUT_MS, cut shorter by the caller's deadline signal. */
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(WHATSAPP_TIMEOUT_MS);
+  return signal ? AbortSignal.any([timeout, signal]) : timeout;
+}
 
 export const normalizePhone = (value: string) => value.replace(/\D/g, "").replace(/^00/, "");
 
@@ -94,14 +102,15 @@ export function splitMessage(text: string, max = WHATSAPP_MAX_TEXT): string[] {
   return parts;
 }
 
-export async function sendWhatsAppText(config: WhatsAppConfig, to: string, text: string): Promise<void> {
+export async function sendWhatsAppText(config: WhatsAppConfig, to: string, text: string, signal?: AbortSignal): Promise<void> {
   for (const body of splitMessage(toWhatsAppText(text))) {
     const res = await fetch(`${GRAPH_URL}/${config.graphVersion}/${config.phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body, preview_url: false } }),
+      signal: requestSignal(signal),
     });
-    if (!res.ok) throw new Error(`WhatsApp send failed (${res.status}): ${await res.text()}`);
+    if (!res.ok) throw new Error(`WhatsApp send failed (${res.status}): ${(await res.text()).slice(0, 500)}`);
   }
 }
 
@@ -121,18 +130,23 @@ export function isMetaMediaUrl(url: string): boolean {
 export async function downloadWhatsAppMedia(
   config: WhatsAppConfig,
   mediaId: string,
-  maxBytes: number
-): Promise<{ data: ArrayBuffer; mimeType: string }> {
+  maxBytes: number,
+  signal?: AbortSignal
+): Promise<{ data: Uint8Array; mimeType: string }> {
   const auth = { Authorization: `Bearer ${config.token}` };
-  const meta = await fetch(`${GRAPH_URL}/${config.graphVersion}/${encodeURIComponent(mediaId)}`, { headers: auth });
+  const meta = await fetch(`${GRAPH_URL}/${config.graphVersion}/${encodeURIComponent(mediaId)}`, {
+    headers: auth,
+    signal: requestSignal(signal),
+  });
   if (!meta.ok) throw new Error(`WhatsApp media lookup failed (${meta.status})`);
   const info: unknown = await meta.json();
   if (!isRecord(info) || !str(info.url)) throw new Error("WhatsApp media has no URL");
   if (typeof info.file_size === "number" && info.file_size > maxBytes) throw new Error("Image too large");
   if (!isMetaMediaUrl(str(info.url))) throw new Error("Unexpected WhatsApp media host");
-  const file = await fetch(str(info.url), { headers: auth, redirect: "error" });
+  const file = await fetch(str(info.url), { headers: auth, redirect: "error", signal: requestSignal(signal) });
   if (!file.ok) throw new Error(`WhatsApp media download failed (${file.status})`);
-  const data = await file.arrayBuffer();
-  if (data.byteLength > maxBytes) throw new Error("Image too large");
+  const declared = Number(file.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new Error("Image too large");
+  const data = await readCapped(file, maxBytes);
   return { data, mimeType: str(info.mime_type) || file.headers.get("content-type") || "image/jpeg" };
 }

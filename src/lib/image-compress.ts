@@ -17,8 +17,37 @@ interface DecodedImage {
   release: () => void;
 }
 
+/** Conversion failure with a message that's safe to show to the user. */
+export class ImageConversionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ImageConversionError";
+  }
+}
+
+/** By extension too: Chrome and Firefox often leave `type` empty for HEIC files. */
+export function isHeic(file: Blob): boolean {
+  return /^image\/hei[cf](-sequence)?$/i.test(file.type) || (file instanceof File && /\.(heic|heif)$/i.test(file.name));
+}
+
 export function isImageFile(file: File): boolean {
-  return file.type.startsWith("image/") || /\.(heic|heif)$/i.test(file.name);
+  return file.type.startsWith("image/") || isHeic(file);
+}
+
+async function heicToJpeg(file: Blob): Promise<Blob> {
+  // `typeof window` is a compile-time constant, so server bundles drop this branch and heic2any (~1.3 MB) with it.
+  if (typeof window !== "undefined") {
+    try {
+      const { default: heic2any } = await import("heic2any");
+      const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+      const jpeg = Array.isArray(converted) ? converted[0] : converted;
+      if (!jpeg) throw new Error("heic2any returned no image");
+      return jpeg;
+    } catch (error) {
+      throw new ImageConversionError("This HEIC photo couldn't be converted. Try sending it as a JPEG.", { cause: error });
+    }
+  }
+  throw new ImageConversionError("HEIC photos can only be converted in the browser.");
 }
 
 async function decodeWithBitmap(file: Blob): Promise<DecodedImage | null> {
@@ -52,13 +81,14 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 /**
  * Downscales an image so its longest side is at most `maxDimension` and re-encodes it as WebP
  * (JPEG where the browser can't encode WebP, e.g. older Safari). EXIF orientation is applied.
- * Throws when the browser can't decode the file (e.g. HEIC outside Safari).
+ * HEIC/HEIF the browser can't decode (anything but Safari) is converted to JPEG first; if that fails
+ * it throws an `ImageConversionError`. Throws when the browser can't decode the file.
  */
 export async function compressImage(
   file: Blob,
   { maxDimension = MAX_IMAGE_DIMENSION, quality = DEFAULT_QUALITY } = {}
 ): Promise<CompressedImage> {
-  const image = (await decodeWithBitmap(file)) ?? (await decodeWithElement(file));
+  const image = (await decodeWithBitmap(file)) ?? (await decodeWithElement(isHeic(file) ? await heicToJpeg(file) : file));
   try {
     const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     const width = Math.max(1, Math.round(image.width * scale));

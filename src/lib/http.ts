@@ -34,14 +34,38 @@ export function isObjectId(id: string): boolean {
   return isValidObjectId(id);
 }
 
+class BodyTooLargeError extends Error {}
+
+/** Reads the body as text, stopping once it exceeds `maxBytes` (Content-Length can be absent or wrong). */
+async function readBodyCapped(req: Request, maxBytes: number): Promise<string> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new BodyTooLargeError();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/** Parses and validates a JSON body; with `maxBytes`, larger bodies get a 413 without being buffered whole. */
 export async function parseJsonBody<T extends z.ZodType>(
   req: Request,
-  schema: T
+  schema: T,
+  maxBytes?: number
 ): Promise<{ data: z.infer<T> } | { error: NextResponse }> {
   let body: unknown;
   try {
-    body = await req.json();
-  } catch {
+    body = maxBytes === undefined ? await req.json() : JSON.parse(await readBodyCapped(req, maxBytes));
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) return { error: jsonError("Request body is too large", 413) };
     return { error: jsonError("Invalid JSON body", 400) };
   }
   const result = schema.safeParse(body);

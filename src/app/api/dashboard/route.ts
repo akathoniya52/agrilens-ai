@@ -7,6 +7,7 @@ import { Farm } from "@/lib/models/Farm";
 import { Field } from "@/lib/models/Field";
 import { Message } from "@/lib/models/Message";
 import { Reminder } from "@/lib/models/Reminder";
+import { resolveTimeZone } from "@/lib/timezone";
 import type { Severity } from "@/types/chat";
 import type { DashboardData } from "@/types/farm";
 
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) {
     if (farmId && !isObjectId(farmId)) return jsonError("Invalid farmId", 400);
     const match: Record<string, unknown> = { userId, ...(farmId && { farmId: new Types.ObjectId(farmId) }) };
     const since = new Date(Date.now() - WINDOW_DAYS * DAY_MS);
+    // Validated IANA name (or the default), so days roll over at the user's midnight, not UTC's.
+    const timezone = resolveTimeZone(auth.user.timeZone);
 
     const [facets, farms, fields, openReminders, recent] = await Promise.all([
       DiagnosisRecord.aggregate<{
@@ -44,7 +47,7 @@ export async function GET(req: NextRequest) {
             total: [{ $count: "n" }],
             overTime: [
               { $match: { createdAt: { $gte: since } } },
-              { $group: { _id: { date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, severity: "$severity" }, n: { $sum: 1 } } },
+              { $group: { _id: { date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone } }, severity: "$severity" }, n: { $sum: 1 } } },
             ],
             severity: [{ $group: { _id: "$severity", n: { $sum: 1 } } }],
             topConditions: [

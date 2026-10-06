@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { jsonError, safeEqual, serverError } from "@/lib/http";
 import { parseInboundMessages, verifyWebhookSignature, whatsappConfig } from "@/lib/whatsapp";
-import { handleInbound } from "@/lib/whatsapp-bot";
+import { WEBHOOK_BUDGET_MS, handleInbound } from "@/lib/whatsapp-bot";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const deadline = Date.now() + WEBHOOK_BUDGET_MS;
   try {
     const config = whatsappConfig();
     if (!config) return jsonError("WhatsApp is not configured", 503);
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
       return jsonError("Invalid JSON body", 400);
     }
     const messages = parseInboundMessages(payload);
-    if (messages.length) after(() => Promise.all(messages.map((m) => handleInbound(config, m))));
+    // Reply 200 at once; the answers run after the response against one shared deadline.
+    if (messages.length) after(() => Promise.all(messages.map((m) => handleInbound(config, m, deadline))));
     return NextResponse.json({ received: messages.length });
   } catch (error) {
     return serverError("POST /api/whatsapp", error);

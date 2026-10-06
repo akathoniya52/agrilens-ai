@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ConfidenceRing, SeverityMeter, cx } from "@/components/ui";
+import { useHasMounted } from "@/components/useHasMounted";
 
 interface Box {
   label: string;
@@ -32,7 +33,10 @@ const SWEEP_SECONDS = 2.4;
 const HOLD_MS = 6000;
 
 export default function ScanHero({ alt, labels }: ScanHeroProps) {
-  const reduce = useReducedMotion();
+  const prefersReduced = useReducedMotion();
+  const mounted = useHasMounted();
+  // Reduced motion is unknown on the server; apply it only after hydration so the first paint matches.
+  const reduce = mounted && prefersReduced === true;
   const [phase, setPhase] = useState<"scanning" | "done">("scanning");
   const [cycle, setCycle] = useState(0);
   const done = reduce || phase === "done";

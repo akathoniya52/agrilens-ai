@@ -1,8 +1,11 @@
 import type { Part } from "@google/genai";
 import type { Attachment } from "@/types/chat";
 
-export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+/** Upload/voice limits stay below Vercel's 4.5 MB request body limit (multipart overhead included). */
+export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+export const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
+/** Total decoded size of inline (data URL) attachments in one message; keeps it far below MongoDB's 16 MB. */
+export const MAX_INLINE_ATTACHMENT_BYTES = 2 * MAX_IMAGE_BYTES;
 export const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -41,15 +44,16 @@ export function base64ByteLength(data: string): number {
   return Math.floor((data.length * 3) / 4) - padding;
 }
 
-export function toDataUrl(buffer: ArrayBuffer, mimeType: string): string {
-  return `data:${mimeType};base64,${Buffer.from(buffer).toString("base64")}`;
+export function toDataUrl(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("base64")}`;
 }
 
 /**
  * Only the user's own uploads in our Blob store are fetched server-side (prevents SSRF and reading
  * other users' blobs). The hostname must match our store exactly (see configuredBlobHost); only outside
  * production, with no store configured, is any Vercel Blob host accepted. Either way the path must be
- * `/uploads/<userId>/` (see /api/upload). Inline data URLs are capped at MAX_IMAGE_BYTES.
+ * `/uploads/<userId>/` (see /api/upload). Inline data URLs (dev uploads without Blob) are rejected in
+ * production, where they would bypass the upload size and rate limits, and capped at MAX_IMAGE_BYTES.
  */
 export function isTrustedImageUrl(
   url: string,
@@ -57,10 +61,7 @@ export function isTrustedImageUrl(
   blobHost = configuredBlobHost(),
   production = process.env.NODE_ENV === "production"
 ): boolean {
-  if (url.startsWith("data:")) {
-    const inline = parseDataUrl(url);
-    return inline !== null && base64ByteLength(inline.data) <= MAX_IMAGE_BYTES;
-  }
+  if (url.startsWith("data:")) return !production && isValidInlineImage(url);
   try {
     const parsed = new URL(url);
     const host = blobHost?.trim().toLowerCase();
@@ -77,6 +78,19 @@ export function isTrustedImageUrl(
   } catch {
     return false;
   }
+}
+
+function isValidInlineImage(url: string): boolean {
+  const inline = parseDataUrl(url);
+  return inline !== null && base64ByteLength(inline.data) <= MAX_IMAGE_BYTES;
+}
+
+/** Decoded bytes of all inline data URL attachments (0 for Blob URLs). */
+export function inlineAttachmentBytes(attachments: Pick<Attachment, "url">[]): number {
+  return attachments.reduce((total, { url }) => {
+    const inline = url.startsWith("data:") ? parseDataUrl(url) : null;
+    return total + (inline ? base64ByteLength(inline.data) : 0);
+  }, 0);
 }
 
 async function attachmentToPart(attachment: Attachment): Promise<Part> {
@@ -99,7 +113,7 @@ async function attachmentToPart(attachment: Attachment): Promise<Part> {
 }
 
 /** Reads a response body, aborting once it exceeds `maxBytes` (Content-Length can be absent or wrong). */
-async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> {
+export async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> {
   if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -110,7 +124,7 @@ async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array> 
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw new Error("Image too large");
+      throw new Error("Response too large");
     }
     chunks.push(value);
   }
@@ -145,10 +159,30 @@ export function sniffImageType(bytes: Uint8Array): (typeof ALLOWED_IMAGE_TYPES)[
   return null;
 }
 
+/**
+ * Stored attachments the server may load: the user's own Blob uploads, or inline images already saved
+ * on the message (WhatsApp photos, dev uploads). Client requests are still checked with isTrustedImageUrl.
+ */
 export function imageAttachments(attachments: Attachment[] | undefined, userId: string): Attachment[] {
-  return (attachments ?? []).filter((a) => isAllowedImageType(a.type) && isTrustedImageUrl(a.url, userId));
+  return (attachments ?? []).filter(
+    (a) => isAllowedImageType(a.type) && (isValidInlineImage(a.url) || isTrustedImageUrl(a.url, userId))
+  );
 }
 
-export async function loadImageParts(attachments: Attachment[], userId: string): Promise<Part[]> {
-  return Promise.all(imageAttachments(attachments, userId).map(attachmentToPart));
+export interface LoadedImages {
+  parts: Part[];
+  /** Attachments that were skipped or could not be loaded. */
+  failed: number;
+}
+
+/** Loads every image it can; one bad attachment no longer drops the others. */
+export async function loadImageParts(attachments: Attachment[] | undefined, userId: string): Promise<LoadedImages> {
+  const all = attachments ?? [];
+  const results = await Promise.allSettled(imageAttachments(all, userId).map(attachmentToPart));
+  const parts: Part[] = [];
+  for (const result of results) {
+    if (result.status === "fulfilled") parts.push(result.value);
+    else console.error("AgriLens image loading failed:", result.reason);
+  }
+  return { parts, failed: all.length - parts.length };
 }

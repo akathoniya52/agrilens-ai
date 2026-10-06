@@ -97,6 +97,13 @@ function parseCurrent(data: OpenMeteoResponse): CurrentWeather {
   };
 }
 
+/** Snaps a location to a ~11 km grid so neighbouring farms can share one forecast. */
+export function roundedLocation(lat: number, lon: number, step = 0.1): { lat: number; lon: number; key: string } {
+  const snap = (value: number) => Number((Math.round(value / step) * step).toFixed(6));
+  const rounded = { lat: snap(lat), lon: snap(lon) };
+  return { ...rounded, key: `${rounded.lat},${rounded.lon}` };
+}
+
 export async function getWeather(lat: number, lon: number, now: number = Date.now()): Promise<WeatherReport> {
   const res = await fetch(forecastUrl(lat, lon), {
     next: { revalidate: REVALIDATE_SECONDS },

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { FieldInput } from "@/lib/farm-schemas";
-import { findOwnedFarm, serializeField } from "@/lib/farm-service";
+import { findOwnedFarm, isGeoIndexError, serializeField } from "@/lib/farm-service";
 import { polygonAreaHa } from "@/lib/geo";
 import { isObjectId, jsonError, parseJsonBody, serverError } from "@/lib/http";
 import { Field } from "@/lib/models/Field";
@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     });
     return NextResponse.json(serializeField(field.toObject()), { status: 201 });
   } catch (error) {
+    if (isGeoIndexError(error)) return jsonError("Invalid field boundary", 400);
     return serverError("POST /api/farms/[farmId]/fields", error);
   }
 }

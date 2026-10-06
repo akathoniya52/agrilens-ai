@@ -14,7 +14,8 @@ interface RemindersPanelProps {
   farmId: string;
   fields: FieldDTO[];
   reminders: ReminderDTO[];
-  onCreate: (inputs: ReminderInput[]) => Promise<void>;
+  /** Resolves to true once saved; the form keeps its input otherwise. */
+  onCreate: (inputs: ReminderInput[]) => Promise<boolean>;
   onToggle: (reminder: ReminderDTO) => void;
   onDelete: (reminder: ReminderDTO) => void;
 }
@@ -31,6 +32,7 @@ export default function RemindersPanel({ farmId, fields, reminders, onCreate, on
   const [kind, setKind] = useState<ReminderInputKind>("custom");
   const [fieldId, setFieldId] = useState("");
   const [showDone, setShowDone] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [now] = useState(() => Date.now());
 
   const open = reminders.filter((r) => !r.done);
@@ -39,10 +41,16 @@ export default function RemindersPanel({ farmId, fields, reminders, onCreate, on
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!title.trim() || !due) return;
-    await onCreate([{ title: title.trim(), dueAt: new Date(`${due}T08:00:00`).toISOString(), kind, farmId, fieldId: fieldId || null }]);
-    setTitle("");
-    setDue("");
+    if (saving || !title.trim() || !due) return;
+    setSaving(true);
+    try {
+      const saved = await onCreate([{ title: title.trim(), dueAt: new Date(`${due}T08:00:00`).toISOString(), kind, farmId, fieldId: fieldId || null }]);
+      if (!saved) return;
+      setTitle("");
+      setDue("");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const row = (r: ReminderDTO) => {
@@ -109,7 +117,7 @@ export default function RemindersPanel({ farmId, fields, reminders, onCreate, on
               <option key={f._id} value={f._id}>{f.name}</option>
             ))}
           </select>
-          <button type="submit" disabled={!title.trim() || !due} className="min-h-11 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-50">
+          <button type="submit" disabled={saving || !title.trim() || !due} aria-busy={saving} className="min-h-11 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-50">
             {tc("save")}
           </button>
         </div>

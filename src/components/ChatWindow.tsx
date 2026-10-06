@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslations } from "next-intl";
 import type { Attachment, ChatSummary } from "@/types/chat";
@@ -8,6 +8,7 @@ import MessageBubble from "./MessageBubble";
 import { MessagesSkeleton } from "./chat/ChatSkeleton";
 import Composer, { type ComposerHandle } from "./chat/Composer";
 import EmptyState from "./chat/EmptyState";
+import { LoadOlderButton, ThreadError, UnansweredNote } from "./chat/ThreadNotices";
 import { MenuIcon, ScanIcon } from "./chat/icons";
 import { useChatStream, type UiMessage } from "./chat/useChatStream";
 import { useSpeech } from "./chat/useSpeech";
@@ -18,9 +19,11 @@ interface ChatWindowProps {
   onChatCreated: (chat: ChatSummary) => void;
   onChatActivity: (chat: { _id: string; title?: string }) => void;
   onOpenSidebar: () => void;
+  onNewChat: () => void;
 }
 
 const STICK_THRESHOLD_PX = 140;
+const LOAD_OLDER_THRESHOLD_PX = 240;
 
 function sourceImageFor(messages: UiMessage[], index: number): Attachment | undefined {
   for (let i = index - 1; i >= 0; i--) {
@@ -32,11 +35,12 @@ function sourceImageFor(messages: UiMessage[], index: number): Attachment | unde
 
 const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes("Files");
 
-export default function ChatWindow({ chatId, title, onChatCreated, onChatActivity, onOpenSidebar }: ChatWindowProps) {
+export default function ChatWindow({ chatId, title, onChatCreated, onChatActivity, onOpenSidebar, onNewChat }: ChatWindowProps) {
   const t = useTranslations("chat");
   const composerRef = useRef<ComposerHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
+  const olderAnchorRef = useRef<number | null>(null);
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
   const speech = useSpeech();
@@ -48,17 +52,37 @@ export default function ChatWindow({ chatId, title, onChatCreated, onChatActivit
   });
 
   const { messages, status, streamingId } = chat;
-  const showEmpty = !chat.isLoading && messages.length === 0;
+  const showEmpty = !chat.isLoading && !chat.loadFailed && messages.length === 0;
   const lastIndex = messages.length - 1;
+  const firstId = messages[0]?._id;
 
   useEffect(() => {
     stickRef.current = true;
+    olderAnchorRef.current = null;
   }, [chatId]);
+
+  // Older messages were prepended: keep the same message under the user's finger.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = olderAnchorRef.current;
+    if (!el || anchor === null) return;
+    olderAnchorRef.current = null;
+    el.scrollTop = el.scrollHeight - anchor;
+  }, [firstId]);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (el && stickRef.current) el.scrollTo({ top: el.scrollHeight });
   }, [messages, chat.isLoading]);
+
+  const loadOlder = () => {
+    const el = scrollRef.current;
+    if (!el || !chat.hasMore || chat.loadingOlder) return;
+    olderAnchorRef.current = el.scrollHeight - el.scrollTop;
+    void chat.loadOlder().then((added) => {
+      if (!added) olderAnchorRef.current = null;
+    });
+  };
 
   const sendText = (content: string) => {
     stickRef.current = true;
@@ -107,15 +131,20 @@ export default function ChatWindow({ chatId, title, onChatCreated, onChatActivit
         onScroll={(event) => {
           const el = event.currentTarget;
           stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_THRESHOLD_PX;
+          if (el.scrollTop < LOAD_OLDER_THRESHOLD_PX) loadOlder();
         }}
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
       >
         <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 pb-10 pt-6 sm:px-6">
           {chat.isLoading ? (
             <MessagesSkeleton />
+          ) : chat.loadFailed ? (
+            <ThreadError notFound={chat.notFound} onRetry={chat.retryLoad} onNewChat={onNewChat} />
           ) : showEmpty ? (
             <EmptyState onScan={() => composerRef.current?.openCamera()} onPrompt={(text) => composerRef.current?.setText(text)} />
           ) : (
+            <>
+            {chat.hasMore && <LoadOlderButton loading={chat.loadingOlder} onClick={loadOlder} />}
             <div className="space-y-7">
               {messages.map((message, i) => {
                 const streaming = message._id === streamingId;
@@ -135,7 +164,9 @@ export default function ChatWindow({ chatId, title, onChatCreated, onChatActivit
                   />
                 );
               })}
+              {chat.unanswered && <UnansweredNote onRegenerate={chat.regenerate} disabled={status !== "idle"} />}
             </div>
+            </>
           )}
         </div>
       </div>
@@ -146,6 +177,7 @@ export default function ChatWindow({ chatId, title, onChatCreated, onChatActivit
           <Composer
             ref={composerRef}
             status={status}
+            disabled={!chat.ready}
             onStop={chat.stop}
             onSend={(draft) => {
               stickRef.current = true;

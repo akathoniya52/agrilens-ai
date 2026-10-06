@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useRef, useState, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import { cx } from "@/components/ui";
 import type { ChatSummary } from "@/types/chat";
@@ -16,33 +16,42 @@ interface ChatListItemProps {
   onCancelEdit: () => void;
 }
 
+/** Mounted fresh each time Rename opens, so it always starts from the current (possibly auto-generated) title. */
+function RenameInput({ title, onRename, onCancel }: { title: string; onRename: (title: string) => void; onCancel: () => void }) {
+  const t = useTranslations("chat");
+  const [draft, setDraft] = useState(title);
+  const settled = useRef(false);
+
+  const finish = (save: boolean) => {
+    if (settled.current) return;
+    settled.current = true;
+    const next = draft.trim();
+    if (save && next && next !== title) onRename(next);
+    else onCancel();
+  };
+
+  return (
+    <input
+      autoFocus
+      value={draft}
+      maxLength={120}
+      aria-label={t("rename")}
+      onChange={(event) => setDraft(event.target.value)}
+      onFocus={(event) => event.currentTarget.select()}
+      onBlur={() => finish(true)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") finish(true);
+        if (event.key === "Escape") finish(false);
+      }}
+      className="h-10 w-full rounded-xl border border-accent/60 bg-surface px-3 text-sm text-fg shadow-glow outline-none"
+    />
+  );
+}
+
 export default function ChatListItem({ chat, active, editing, onSelect, onOpenMenu, onRename, onCancelEdit }: ChatListItemProps) {
   const t = useTranslations("chat");
-  const [draft, setDraft] = useState(chat.title);
 
-  if (editing) {
-    const commit = () => {
-      const title = draft.trim();
-      if (title && title !== chat.title) onRename(title);
-      else onCancelEdit();
-    };
-    return (
-      <input
-        autoFocus
-        value={draft}
-        maxLength={120}
-        aria-label={t("rename")}
-        onChange={(event) => setDraft(event.target.value)}
-        onFocus={(event) => event.currentTarget.select()}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
-          if (event.key === "Escape") onCancelEdit();
-        }}
-        className="h-10 w-full rounded-xl border border-accent/60 bg-surface px-3 text-sm text-fg shadow-glow outline-none"
-      />
-    );
-  }
+  if (editing) return <RenameInput title={chat.title} onRename={onRename} onCancel={onCancelEdit} />;
 
   const openFromButton = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();

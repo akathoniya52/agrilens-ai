@@ -5,14 +5,16 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useFormatter, useTranslations } from "next-intl";
-import { toast } from "sonner";
 import { AnimatedCounter, FadeIn, GlowCard, Panel, Skeleton, Stagger, StaggerItem } from "@/components/ui";
 import { BellIcon, CameraIcon, ChartIcon, GlobeIcon, MapIcon, SproutMark } from "@/components/icons";
 import MarketWidget from "@/components/insights/MarketWidget";
 import BeforeAfterSlider from "@/components/dashboard/BeforeAfterSlider";
 import { FieldHealthBars, OverTimeChart, SeverityDonut, TopConditionsChart } from "@/components/dashboard/DashboardCharts";
 import { getJson } from "@/components/account";
+import LoadError from "@/components/LoadError";
+import { useRetryableLoad } from "@/components/useRetryableLoad";
 import type { DashboardData } from "@/types/farm";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 function Empty({ children }: { children: ReactNode }) {
   return <p className="py-8 text-center text-sm text-fg-muted">{children}</p>;
@@ -25,20 +27,15 @@ function Dashboard() {
   const { status } = useSession();
   const router = useRouter();
   const farmId = useSearchParams().get("farmId");
-  const [data, setData] = useState<DashboardData | null>(null);
   const [pair, setPair] = useState<{ before: string; after: string } | null>(null);
+  const { data, error, retry } = useRetryableLoad(
+    () => getJson<DashboardData>(`/api/dashboard${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ""}`),
+    { enabled: status === "authenticated", key: farmId ?? "" }
+  );
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
-    if (status !== "authenticated") return;
-    let cancelled = false;
-    getJson<DashboardData>(`/api/dashboard${farmId ? `?farmId=${farmId}` : ""}`)
-      .then((res) => !cancelled && setData(res))
-      .catch(() => !cancelled && toast.error(tc("error")));
-    return () => {
-      cancelled = true;
-    };
-  }, [status, router, farmId, tc]);
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
+  }, [status, router]);
 
   const defaultPair = useMemo(() => {
     if (!data) return null;
@@ -50,6 +47,15 @@ function Dashboard() {
     const group = [...byField.values()].find((list) => list.length >= 2) ?? (data.gallery.length >= 2 ? data.gallery : null);
     return group ? { before: group[group.length - 1]._id, after: group[0]._id } : null;
   }, [data]);
+
+  if (status === "authenticated" && error) {
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <h1 className="mb-8 font-display text-4xl font-bold text-fg sm:text-5xl">{t("title")}</h1>
+        <LoadError onRetry={retry} />
+      </main>
+    );
+  }
 
   if (status !== "authenticated" || !data) {
     return (

@@ -12,6 +12,7 @@ import { ShieldIcon, UserIcon } from "@/components/icons";
 import { casesApi } from "@/components/insights/api";
 import { FadeIn, Skeleton, cx } from "@/components/ui";
 import type { CaseDTO, CaseStatus } from "@/types/insights";
+import { signInUrlForCurrentPage } from "@/lib/client/sign-in";
 
 const STATUS_TONE: Record<CaseStatus, string> = {
   open: "border-warning/40 bg-warning/10 text-warning",
@@ -143,7 +144,7 @@ export default function CasesPage() {
   const loadFailed = t("loadFailed");
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/auth/signin");
+    if (status === "unauthenticated") router.replace(signInUrlForCurrentPage());
     if (status !== "authenticated") return;
     let cancelled = false;
     casesApi

@@ -8,6 +8,13 @@ describe("classifyOutboxStatus", () => {
     expect(classifyOutboxStatus(409)).toBe("delivered");
   });
 
+  it("delivers resent questions that are saved but unanswered, and retries while the chat is busy", () => {
+    expect(classifyOutboxStatus(409, "unanswered")).toBe("delivered");
+    expect(classifyOutboxStatus(409, null)).toBe("delivered");
+    expect(classifyOutboxStatus(409, "busy")).toBe("retry");
+    expect(classifyOutboxStatus(200, "busy")).toBe("delivered");
+  });
+
   it("drops only permanently invalid items", () => {
     expect(classifyOutboxStatus(400)).toBe("drop");
     expect(classifyOutboxStatus(404)).toBe("drop");

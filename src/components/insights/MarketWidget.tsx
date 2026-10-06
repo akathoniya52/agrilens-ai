@@ -3,11 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { Skeleton, cx } from "@/components/ui";
+import type { MarketResponse } from "@/lib/market-trend";
 import type { MarketResult } from "@/types/insights";
 import { insightsApi } from "./api";
 import Sparkline from "./Sparkline";
 
 const COMMON = ["Wheat", "Paddy(Dhan)(Common)", "Maize", "Cotton", "Tomato", "Potato", "Onion", "Soyabean", "Mustard", "Gram"];
+
+const withStale = (result: MarketResult): MarketResponse => ({ ...result, stale: "stale" in result && result.stale === true });
 
 interface Query {
   commodity: string;
@@ -19,14 +22,14 @@ export default function MarketWidget({ defaultCommodity }: { defaultCommodity?: 
   const format = useFormatter();
   const [draft, setDraft] = useState<Query>({ commodity: defaultCommodity || "Wheat", state: "" });
   const [query, setQuery] = useState<Query>(draft);
-  const [state, setState] = useState<{ key: string; result: MarketResult | null } | null>(null);
+  const [state, setState] = useState<{ key: string; result: MarketResponse | null } | null>(null);
   const key = `${query.commodity}|${query.state}`;
 
   useEffect(() => {
     let cancelled = false;
     insightsApi
       .market(query.commodity, query.state || null)
-      .then((result) => !cancelled && setState({ key, result }))
+      .then((result) => !cancelled && setState({ key, result: withStale(result) }))
       .catch(() => !cancelled && setState({ key, result: null }));
     return () => {
       cancelled = true;
@@ -48,7 +51,7 @@ export default function MarketWidget({ defaultCommodity }: { defaultCommodity?: 
   else if (result.status === "not_configured") body = <p className="text-sm text-fg-muted">{t("notConfigured")}</p>;
   else if (result.status === "no_data") body = <p className="text-sm text-fg-muted">{t("noData", { commodity: result.commodity })}</p>;
   else {
-    const { latest, trend, series, markets } = result;
+    const { latest, trend, series, markets, stale } = result;
     const arrow = trend.direction === "up" ? "▲" : trend.direction === "down" ? "▼" : "▬";
     body = (
       <>
@@ -72,6 +75,7 @@ export default function MarketWidget({ defaultCommodity }: { defaultCommodity?: 
             {trend.changePct !== null && ` · ${trend.changePct > 0 ? "+" : ""}${trend.changePct}%`}
           </span>
         </div>
+        {stale && <p className="mt-2 text-xs font-medium text-warning">{t("stale")}</p>}
         {series.length > 1 && (
           <div className="mt-3">
             <Sparkline
