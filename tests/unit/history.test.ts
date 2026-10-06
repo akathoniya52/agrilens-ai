@@ -28,6 +28,37 @@ describe("buildHistory", () => {
     expect(buildHistory(newestFirst)).toEqual([{ role: "user", parts: [{ text: "U2" }] }]);
   });
 
+  it("keeps image-only user turns and the diagnosis of the answer", () => {
+    const newestFirst: HistoryMessage[] = [
+      { role: "user", content: "How do I treat it?" },
+      {
+        role: "assistant",
+        content: "This looks like early blight.",
+        diagnosis: {
+          crop: "Tomato",
+          condition: "Early blight",
+          confidence: 0.82,
+          severity: "moderate",
+          affectedAreaPct: 15,
+          boxes: [],
+        },
+      },
+      { role: "user", content: "", attachments: [{ type: "image/jpeg" }] },
+    ];
+    expect(buildHistory(newestFirst)).toEqual([
+      { role: "user", parts: [{ text: "[Sent 1 crop photo]" }] },
+      {
+        role: "model",
+        parts: [
+          {
+            text: "[Image diagnosis: Tomato — Early blight, severity moderate, ~15% affected, confidence 82%]\nThis looks like early blight.",
+          },
+        ],
+      },
+      { role: "user", parts: [{ text: "How do I treat it?" }] },
+    ]);
+  });
+
   it("returns empty history when there is no user turn", () => {
     expect(buildHistory([{ role: "assistant", content: "hi" }])).toEqual([]);
     expect(HISTORY_LIMIT).toBe(10);

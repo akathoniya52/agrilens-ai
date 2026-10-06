@@ -1,12 +1,13 @@
 /* AgriLens service worker — hand-written, no build step. Bump VERSION to invalidate caches. */
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `agrilens-shell-${VERSION}`;
 const STATIC_CACHE = `agrilens-static-${VERSION}`;
 const PAGE_CACHE = `agrilens-pages-${VERSION}`;
 const API_CACHE = `agrilens-api-${VERSION}`;
 const CACHES = [SHELL_CACHE, STATIC_CACHE, PAGE_CACHE, API_CACHE];
 
-const SHELL_URLS = ["/", "/chat", "/farms", "/logo.png", "/manifest.webmanifest"];
+// Sign-in-gated pages (/chat, /farms) are not precached: installing while signed out would store the redirect.
+const SHELL_URLS = ["/", "/icon-192.png", "/manifest.webmanifest"];
 const API_CACHE_LIMIT = 24;
 const PAGE_CACHE_LIMIT = 30;
 const CACHEABLE_API = /^\/api\/(chats(\/[a-f0-9]{24}(\/messages)?)?|farms|me)$/;
@@ -16,7 +17,14 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => Promise.allSettled(SHELL_URLS.map((url) => cache.add(new Request(url, { cache: "reload" })))))
+      .then((cache) =>
+        Promise.allSettled(
+          SHELL_URLS.map(async (url) => {
+            const response = await fetch(new Request(url, { cache: "reload" }));
+            if (cacheable(response)) await cache.put(url, response);
+          })
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -36,10 +44,12 @@ async function trim(cacheName, limit) {
   await Promise.all(keys.slice(0, Math.max(0, keys.length - limit)).map((key) => cache.delete(key)));
 }
 
+const cacheable = (response) => response.ok && response.type === "basic" && !response.redirected;
+
 async function networkFirst(request, cacheName, limit, fallbackUrls = []) {
   try {
     const response = await fetch(request);
-    if (response.ok && response.type === "basic") {
+    if (cacheable(response)) {
       const cache = await caches.open(cacheName);
       await cache.delete(request);
       await cache.put(request, response.clone());
@@ -57,15 +67,27 @@ async function networkFirst(request, cacheName, limit, fallbackUrls = []) {
   }
 }
 
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
+async function fetchAndCache(request) {
   const response = await fetch(request);
-  if (response.ok && response.type === "basic") {
+  if (cacheable(response)) {
     const cache = await caches.open(STATIC_CACHE);
-    cache.put(request, response.clone());
+    await cache.put(request, response.clone());
   }
   return response;
+}
+
+/** For content-hashed /_next/static files: a cached copy can never be stale. */
+async function cacheFirst(request) {
+  return (await caches.match(request)) || fetchAndCache(request);
+}
+
+/** For unhashed public/ files (logo, images): serve the cache, refresh it in the background. */
+async function staleWhileRevalidate(event) {
+  const cached = await caches.match(event.request);
+  const refresh = fetchAndCache(event.request);
+  if (!cached) return refresh;
+  event.waitUntil(refresh.catch(() => undefined));
+  return cached;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -84,8 +106,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname.startsWith("/_next/static/") || (STATIC_ASSET.test(url.pathname) && !url.pathname.startsWith("/_next/image"))) {
+  if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(cacheFirst(request));
+    return;
+  }
+  if (STATIC_ASSET.test(url.pathname) && !url.pathname.startsWith("/_next/image")) {
+    event.respondWith(staleWhileRevalidate(event));
     return;
   }
 
@@ -113,8 +139,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title || "AgriLens", {
       body: payload.body || "",
-      icon: "/logo.png",
-      badge: "/logo.png",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
       tag: payload.tag,
       data: { url: payload.url || "/farms" },
     })

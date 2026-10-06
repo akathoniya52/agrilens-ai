@@ -132,7 +132,7 @@ export async function runAnswer(turn: AnswerTurn, send: Send, signal: AbortSigna
   let creditsSettled = false;
   try {
     const [history, imageParts, farm, rag] = await Promise.all([
-      loadHistory(userMsg),
+      loadHistory(userMsg, chat),
       safeImageParts(userMsg, user._id.toString()),
       farmContext(user),
       ragContext(question),

@@ -56,7 +56,7 @@ export default function ScanHero({ alt, labels }: ScanHeroProps) {
     <div className="relative">
       <div className="relative aspect-[11/6] overflow-hidden rounded-3xl border border-border-strong bg-surface-3 shadow-raised">
         <Image
-          src="/landing_pic.png"
+          src="/landing_pic.webp"
           alt={alt}
           fill
           priority
